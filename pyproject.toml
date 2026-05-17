@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "physical-agent"
+version = "0.1.0"
+description = "A Markdown-native runtime for safe physical-world agents."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Physical Agent Contributors" }
+]
+license = { text = "Apache-2.0" }
+dependencies = [
+  "pydantic>=2.6",
+  "typer>=0.12",
+  "PyYAML>=6.0",
+  "jsonschema>=4.21",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-asyncio>=0.23",
+]
+
+[project.scripts]
+physical-agent = "physical_agent.cli:app"
+
+[tool.setuptools.packages.find]
+include = ["physical_agent*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+

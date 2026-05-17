@@ -51,19 +51,30 @@ Workspace: Markdown files are the protocol between cognition and execution.
 
 ## 快速开始
 
-安装本地开发版本：
+从 fresh clone 开始，一条命令完成本地环境配置、安装、测试、workspace 初始化和 quick smoke test：
 
 ```bash
-pip install -e .
+python scripts/bootstrap.py
 ```
 
-初始化项目：
+这个命令会创建 `.venv`，安装开发依赖，运行测试，执行 `physical-agent setup --smoke-test`，并验证默认 mock arm 能完成 pick/place。
+
+如果你已经有 Python 环境，可以直接运行：
 
 ```bash
-physical-agent init
+pip install -e .[dev]
+physical-agent setup --smoke-test
 ```
 
-在第一个终端启动物理侧 watch：
+启动 GUI：
+
+```bash
+physical-agent gui
+```
+
+GUI 会打开一个本地控制台，可以完成 setup、watch start/step、提交任务、运行 quick demo 和查看 workspace 状态。
+
+你也可以继续使用双进程 CLI 模式。在第一个终端启动物理侧 watch：
 
 ```bash
 physical-agent watch
@@ -81,7 +92,40 @@ physical-agent run --task "pick the red block and place it on the tray"
 physical-agent inspect
 ```
 
+检查项目健康状态：
+
+```bash
+physical-agent doctor
+```
+
 默认配置使用内置 `mock_arm` driver，不需要真实硬件，也不需要 LLM API key。
+
+## 本地 GUI
+
+`physical-agent gui` 会启动一个零前端构建依赖的本地 Web 控制台，底层使用 Python 标准库 HTTP server。
+
+GUI 提供：
+
+- 项目 setup
+- workspace reset
+- watch runtime 连接
+- 单步执行 pending actions
+- 提交任务
+- pick/place quick demo
+- doctor 健康检查
+- robots、world、action board、feedback 状态视图
+
+默认监听 `127.0.0.1:8765`：
+
+```bash
+physical-agent gui --port 8765
+```
+
+不自动打开浏览器：
+
+```bash
+physical-agent gui --no-open
+```
 
 ## Markdown Workspace Protocol
 
@@ -251,10 +295,12 @@ pytest -q
 - rule-based planner
 - watch runtime step
 - 端到端 Markdown loop
+- 一键 setup 与 smoke test
+- doctor 健康检查
+- GUI HTTP endpoints
 
 ## Clean-Room 声明
 
 Physical Agent 是一个独立实现。它使用了公开、通用的架构思想，例如 embodied-agent 分层、watch/runtime 分离、声明式 driver manifest、Markdown workspace protocol 和 MCP-style tool facade。
 
 本项目不包含第三方竞品代码、文件内容复制、README 表述复刻、CLI 设计复刻、示例任务复刻或具体实现复制。
-

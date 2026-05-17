@@ -9,8 +9,11 @@ import yaml
 
 from physical_agent.agent.runtime import AgentRuntime
 from physical_agent.config import DEFAULT_CONFIG_NAME, load_config, write_default_config
+from physical_agent.doctor import doctor_ok, run_doctor
 from physical_agent.drivers.templates import create_driver_template
+from physical_agent.gui import run_gui
 from physical_agent.protocol.workspace import Workspace
+from physical_agent.quickstart import setup_project
 from physical_agent.watch.runtime import WatchRuntime
 
 
@@ -31,6 +34,52 @@ def init(
     typer.echo(f"Initialized Physical Agent project at {config_path.parent}")
     typer.echo(f"Config: {config_path}")
     typer.echo(f"Workspace: {workspace.path}")
+
+
+@app.command("setup")
+def setup(
+    config: Path = typer.Option(Path(DEFAULT_CONFIG_NAME), "--config", "-c", help="Config path."),
+    force: bool = typer.Option(False, "--force", help="Overwrite existing config and workspace files."),
+    smoke_test: bool = typer.Option(
+        False,
+        "--smoke-test",
+        help="Run an in-process pick/place smoke test after setup.",
+    ),
+) -> None:
+    result = setup_project(config, force=force, publish=True, smoke_test=smoke_test)
+    typer.echo("Physical Agent project is ready.")
+    typer.echo(f"Config: {result['config_path']}")
+    typer.echo(f"Workspace: {result['workspace_path']}")
+    if result["smoke_test"] is not None:
+        smoke = result["smoke_test"]
+        status = "passed" if smoke["ok"] else "failed"
+        typer.echo(
+            f"Smoke test {status}: executed {smoke['executed_actions']} action(s), "
+            f"red_block location is {smoke['red_block_location']}."
+        )
+    typer.echo("Next: run `physical-agent gui` or `physical-agent watch`.")
+
+
+@app.command("doctor")
+def doctor(
+    config: Path = typer.Option(Path(DEFAULT_CONFIG_NAME), "--config", "-c", help="Config path."),
+) -> None:
+    checks = run_doctor(config)
+    for check in checks:
+        marker = "OK" if check.ok else "FAIL"
+        typer.echo(f"[{marker}] {check.name}: {check.message}")
+    if not doctor_ok(checks):
+        raise typer.Exit(code=1)
+
+
+@app.command("gui")
+def gui(
+    config: Path = typer.Option(Path(DEFAULT_CONFIG_NAME), "--config", "-c", help="Config path."),
+    host: str = typer.Option("127.0.0.1", "--host", help="Host to bind."),
+    port: int = typer.Option(8765, "--port", "-p", help="Port to bind."),
+    no_open: bool = typer.Option(False, "--no-open", help="Do not open the browser automatically."),
+) -> None:
+    run_gui(config, host=host, port=port, open_browser=not no_open)
 
 
 @app.command("watch")
@@ -132,4 +181,3 @@ def driver_new(name: str = typer.Argument(..., help="Directory/name for the new 
 
 if __name__ == "__main__":
     app()
-

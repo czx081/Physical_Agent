@@ -42,12 +42,30 @@ physical-agent run
 
 ## Quick Start
 
+One-command local bootstrap from a fresh clone:
+
 ```bash
-pip install -e .
-physical-agent init
+python scripts/bootstrap.py
 ```
 
-Start the physical side in one terminal:
+That creates `.venv`, installs the project with dev dependencies, runs tests, initializes the workspace, and runs a pick/place smoke test.
+
+If you already have a Python environment:
+
+```bash
+pip install -e .[dev]
+physical-agent setup --smoke-test
+```
+
+Start the GUI:
+
+```bash
+physical-agent gui
+```
+
+The GUI opens a local console for setup, watch start/step, task submission, quick demo execution, and workspace inspection.
+
+You can still run the two-process CLI flow. Start the physical side in one terminal:
 
 ```bash
 physical-agent watch
@@ -65,7 +83,40 @@ Inspect the workspace state:
 physical-agent inspect
 ```
 
+Check project health:
+
+```bash
+physical-agent doctor
+```
+
 The default project uses the built-in `mock_arm` driver, so no hardware or API key is required.
+
+## Local GUI
+
+`physical-agent gui` starts a dependency-free local web console backed by Python's standard library HTTP server.
+
+The console provides:
+
+- project setup
+- workspace reset
+- watch runtime connection
+- one-step action execution
+- task submission
+- pick/place quick demo
+- doctor checks
+- robot, world, action board, and feedback views
+
+By default it binds to `127.0.0.1:8765`:
+
+```bash
+physical-agent gui --port 8765
+```
+
+Run without opening a browser automatically:
+
+```bash
+physical-agent gui --no-open
+```
 
 ## Markdown Workspace Protocol
 
@@ -188,3 +239,13 @@ produces a `pick` action followed by a dependent `place` action.
 ## Clean-Room Implementation
 
 Physical Agent is an independent implementation. It uses general public architecture ideas such as embodied-agent layering, watchdog/runtime separation, declarative driver manifests, Markdown workspace protocols, and MCP-style tool facades. It does not include third-party competitor code, copied file contents, copied README wording, copied CLI design, copied example task suites, or copied implementation details.
+
+## Development Checks
+
+Run the full test suite:
+
+```bash
+pytest -q
+```
+
+Current coverage includes Markdown protocol parsing/rendering, workspace lifecycle, driver manifest and loader behavior, safety validation, mock drivers, rule-based planning, watch runtime stepping, the end-to-end Markdown loop, one-command setup, doctor checks, and GUI HTTP endpoints.

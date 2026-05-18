@@ -93,7 +93,7 @@ def test_llm_planner_parses_actions_from_chat_completion():
                     "capability": "place",
                     "params": {"target": "tray"},
                     "reason": "Place it on the tray.",
-                    "depends_on": [0],
+                    "depends_on": ["arm_1:pick:red_block"],
                 },
             ]
         }

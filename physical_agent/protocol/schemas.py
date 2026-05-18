@@ -115,3 +115,19 @@ class WorkspaceDocument(StrictModel):
             return int(value)
         except (TypeError, ValueError):
             return 0
+
+
+class ChatMessage(StrictModel):
+    role: Literal["user", "assistant", "system"]
+    content: str
+    created_at: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ChatPlan(StrictModel):
+    status: Literal["idle", "thinking", "proposed_actions", "answered", "needs_watch", "error"] = "idle"
+    intent: str = ""
+    summary: str = ""
+    steps: list[str] = Field(default_factory=list)
+    actions: list[Action] = Field(default_factory=list)
+    needs_watch: bool = False

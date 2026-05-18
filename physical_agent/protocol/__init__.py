@@ -1,6 +1,8 @@
 from physical_agent.protocol.schemas import (
     Action,
     ActionResult,
+    ChatMessage,
+    ChatPlan,
     Capability,
     DriverContext,
     DriverManifest,
@@ -14,6 +16,8 @@ from physical_agent.protocol.workspace import Workspace
 __all__ = [
     "Action",
     "ActionResult",
+    "ChatMessage",
+    "ChatPlan",
     "Capability",
     "DriverContext",
     "DriverManifest",
@@ -23,4 +27,3 @@ __all__ = [
     "Workspace",
     "WorkspaceDocument",
 ]
-

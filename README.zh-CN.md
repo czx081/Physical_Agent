@@ -110,6 +110,7 @@ GUI 提供：
 - workspace reset
 - watch runtime 连接
 - 单步执行 pending actions
+- 多轮 chat
 - 提交任务
 - pick/place quick demo
 - doctor 健康检查
@@ -142,6 +143,9 @@ workspace/
   FEEDBACK.md
   SAFETY.md
   LOG.md
+  CHAT.md
+  PLAN.md
+  MEMORY.md
   artifacts/
 ```
 
@@ -160,6 +164,12 @@ workspace/
 `SAFETY.md` 由人类拥有，watch 读取并强制执行。agent 可以读取，但不能绕过。
 
 `LOG.md` 是审计日志，watch 和 agent 都可以追加记录。
+
+`CHAT.md` 保存人类和 agent 的多轮聊天历史。
+
+`PLAN.md` 保存当前 chat intent、步骤和 proposed actions。
+
+`MEMORY.md` 保存 chat agent 跨轮次记住的小型持久 notes。
 
 静态启动配置放在 `physical-agent.yaml`。动态运行状态放在 Markdown workspace。
 
@@ -285,6 +295,22 @@ physical-agent run --planner llm --task "pick the red block and place it on the 
 physical-agent inspect
 ```
 
+使用完整 chat agent：
+
+```bash
+physical-agent setup --force
+physical-agent chat
+```
+
+也可以发送一条消息后退出：
+
+```bash
+physical-agent chat --message "What can you see right now?"
+physical-agent chat --planner llm --auto-step --message "Please pick the red block and place it on the tray."
+```
+
+chat 命令默认使用 `--planner auto`：如果 `.env` 里有 API 配置就使用 LLM planner，否则回退到 rule-based chat。chat agent 会读取 `CHAT.md`、`MEMORY.md`、`CAPABILITIES.md`、`WORLD.md` 和 `FEEDBACK.md`。它会把回复写回 `CHAT.md`，把当前意图写入 `PLAN.md`，把 proposed actions 写入 `ACTIONS.md`。真正执行仍然由 watch 校验并完成。
+
 在另一个终端运行 watch 执行动作：
 
 ```bash
@@ -351,6 +377,8 @@ pytest -q
 - 一键 setup 与 smoke test
 - doctor 健康检查
 - GUI HTTP endpoints
+- chat protocol、chat memory、chat action proposals
+- chat auto-step execution 和 GUI chat endpoint
 
 ## Clean-Room 声明
 

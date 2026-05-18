@@ -37,3 +37,27 @@ def test_gui_http_demo_endpoint(tmp_path):
         server.shutdown()
         server.server_close()
 
+
+def test_gui_http_chat_endpoint(tmp_path):
+    server = make_server(tmp_path / "physical-agent.yaml", port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        _request(f"{base_url}/api/setup", method="POST", payload={})
+        chat = _request(
+            f"{base_url}/api/chat",
+            method="POST",
+            payload={
+                "message": "pick the red block and place it on the tray",
+                "planner": "rule_based",
+                "auto_step": True,
+            },
+        )
+        assert chat["ok"] is True
+        assert chat["executed"] == 2
+        assert chat["state"]["chat"]["messages"][-1]["role"] == "assistant"
+        assert chat["state"]["world"]["state"]["objects"]["red_block"]["location"] == "tray"
+    finally:
+        server.shutdown()
+        server.server_close()

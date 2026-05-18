@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from physical_agent.agent.chat_runtime import ChatRuntime
 from physical_agent.agent.runtime import AgentRuntime
 from physical_agent.config import DEFAULT_CONFIG_NAME, load_config, write_default_config
 from physical_agent.doctor import doctor_ok, run_doctor
@@ -61,6 +62,9 @@ class GuiController:
                 "cancelled": _dump_actions(actions["cancelled"]),
             },
             "feedback": feedback,
+            "chat": workspace.read_chat(),
+            "plan": workspace.read_plan(),
+            "memory": workspace.read_memory(),
             "doctor": [check.as_dict() for check in run_doctor(self.config_path)],
         }
 
@@ -103,6 +107,26 @@ class GuiController:
             self._ensure_watch_started()
             result = asyncio.run(AgentRuntime(self.config_path).run_task(task, wait_for_feedback=False))
             return {"ok": bool(result["ok"]), "result": _json_safe(result), "state": self.state()}
+
+    def chat_message(self, message: str, *, planner: str = "auto", auto_step: bool = False) -> dict[str, Any]:
+        with self.lock:
+            self._ensure_watch_started()
+            result = ChatRuntime(self.config_path, planner_name=planner).respond(
+                message,
+                auto_step=False,
+            )
+            executed = 0
+            if auto_step and result["actions"]:
+                assert self.watch_runtime is not None
+                executed = asyncio.run(self.watch_runtime.step(setup=False))
+                result["executed"] = executed
+            return {
+                "ok": True,
+                "message": result["reply"],
+                "result": _json_safe(result),
+                "executed": executed,
+                "state": self.state(),
+            }
 
     def run_demo(self) -> dict[str, Any]:
         with self.lock:
@@ -187,6 +211,21 @@ def make_server(
                         )
                         return
                     self._send_json(controller.submit_task(task))
+                    return
+                if route == "/api/chat":
+                    payload = self._read_json()
+                    message = str(payload.get("message", "")).strip()
+                    if not message:
+                        self._send_json(
+                            {"ok": False, "message": "Chat message cannot be empty."},
+                            HTTPStatus.BAD_REQUEST,
+                        )
+                        return
+                    planner = str(payload.get("planner", "auto"))
+                    auto_step = bool(payload.get("auto_step", False))
+                    self._send_json(
+                        controller.chat_message(message, planner=planner, auto_step=auto_step)
+                    )
                     return
                 if route == "/api/demo":
                     self._send_json(controller.run_demo())
@@ -342,6 +381,41 @@ INDEX_HTML = r"""<!doctype html>
       font: inherit;
       line-height: 1.4;
     }
+    select {
+      min-height: 36px;
+      border: 1px solid #b8c1d1;
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      padding: 0 8px;
+      font: inherit;
+    }
+    label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .chat-log {
+      display: grid;
+      gap: 8px;
+      max-height: 360px;
+      overflow: auto;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fbfcfe;
+    }
+    .message {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+      background: #fff;
+      white-space: pre-wrap;
+    }
+    .message.user { border-color: #bfdbfe; background: #eff6ff; }
+    .message.assistant { border-color: #bbf7d0; background: #f0fdf4; }
     .badge {
       display: inline-flex;
       align-items: center;
@@ -421,6 +495,21 @@ INDEX_HTML = r"""<!doctype html>
     </aside>
 
     <div class="stack">
+      <section class="stack">
+        <h2>Chat Agent</h2>
+        <div id="chat-log" class="chat-log"></div>
+        <textarea id="chat-input">What can you see right now?</textarea>
+        <div class="grid">
+          <select id="chat-planner">
+            <option value="auto">Auto chat</option>
+            <option value="llm">LLM chat</option>
+            <option value="rule_based">Rule-based chat</option>
+          </select>
+          <label><input id="chat-auto-step" type="checkbox"> Run watch step</label>
+        </div>
+        <button id="send-chat" class="primary">Send Chat</button>
+      </section>
+
       <section>
         <h2>Project</h2>
         <div id="project" class="list"></div>
@@ -469,7 +558,12 @@ INDEX_HTML = r"""<!doctype html>
       worldState: document.querySelector("#world-state"),
       feedback: document.querySelector("#feedback"),
       robots: document.querySelector("#robots"),
-      actions: document.querySelector("#actions")
+      actions: document.querySelector("#actions"),
+      chatLog: document.querySelector("#chat-log"),
+      chatInput: document.querySelector("#chat-input"),
+      chatPlanner: document.querySelector("#chat-planner"),
+      chatAutoStep: document.querySelector("#chat-auto-step"),
+      sendChat: document.querySelector("#send-chat")
     };
 
     async function api(path, options = {}) {
@@ -543,6 +637,23 @@ INDEX_HTML = r"""<!doctype html>
         const rows = board[name] || [];
         els.actions.appendChild(item(name.toUpperCase(), rows.length ? rows.map(row => `${row.id}: ${row.robot}.${row.capability}`).join("\n") : "none"));
       }
+
+      els.chatLog.innerHTML = "";
+      const messages = ((state.chat || {}).messages) || [];
+      if (messages.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "message";
+        empty.textContent = "No chat messages yet.";
+        els.chatLog.appendChild(empty);
+      } else {
+        for (const message of messages.slice(-20)) {
+          const div = document.createElement("div");
+          div.className = `message ${message.role}`;
+          div.textContent = `${message.role}: ${message.content}`;
+          els.chatLog.appendChild(div);
+        }
+        els.chatLog.scrollTop = els.chatLog.scrollHeight;
+      }
     }
 
     async function refresh() {
@@ -571,6 +682,11 @@ INDEX_HTML = r"""<!doctype html>
     els.demo.addEventListener("click", () => run("Running demo", () => post("/api/demo")));
     els.refresh.addEventListener("click", refresh);
     els.submitTask.addEventListener("click", () => run("Submitting task", () => post("/api/task", {task: els.task.value})));
+    els.sendChat.addEventListener("click", () => run("Sending chat", () => post("/api/chat", {
+      message: els.chatInput.value,
+      planner: els.chatPlanner.value,
+      auto_step: els.chatAutoStep.checked
+    })));
 
     refresh();
   </script>

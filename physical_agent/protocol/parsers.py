@@ -7,7 +7,7 @@ from physical_agent.protocol.markdown import (
     extract_yaml_block_after_heading,
     parse_front_matter,
 )
-from physical_agent.protocol.schemas import Action, Observation
+from physical_agent.protocol.schemas import Action, ChatMessage, ChatPlan, Observation
 
 
 def parse_task(text: str) -> dict[str, Any]:
@@ -80,3 +80,31 @@ def parse_safety(text: str) -> dict[str, Any]:
         "rules": extract_yaml_block_after_heading(doc.body, "Rules", level=2) or {},
     }
 
+
+def parse_chat(text: str) -> dict[str, Any]:
+    doc = parse_front_matter(text)
+    messages = extract_yaml_block_after_heading(doc.body, "Messages", level=2) or []
+    return {
+        "metadata": doc.metadata,
+        "messages": [
+            item if isinstance(item, ChatMessage) else ChatMessage.model_validate(item)
+            for item in messages
+        ],
+    }
+
+
+def parse_plan(text: str) -> dict[str, Any]:
+    doc = parse_front_matter(text)
+    current = extract_yaml_block_after_heading(doc.body, "Current", level=2) or {}
+    return {
+        "metadata": doc.metadata,
+        "plan": current if isinstance(current, ChatPlan) else ChatPlan.model_validate(current),
+    }
+
+
+def parse_memory(text: str) -> dict[str, Any]:
+    doc = parse_front_matter(text)
+    return {
+        "metadata": doc.metadata,
+        "notes": extract_yaml_block_after_heading(doc.body, "Notes", level=2) or [],
+    }

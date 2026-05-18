@@ -75,8 +75,12 @@ class LLMPlanner(Planner):
 
         action_ids = [item["id"] for item in normalized_items]
         actions = []
-        for item in normalized_items:
-            item["depends_on"] = _normalize_depends_on(item.get("depends_on", []), action_ids)
+        for index, item in enumerate(normalized_items):
+            item["depends_on"] = _normalize_depends_on(
+                item.get("depends_on", []),
+                action_ids,
+                current_index=index,
+            )
             actions.append(Action.model_validate(item))
         return actions
 
@@ -108,13 +112,20 @@ def _json_safe(value: Any) -> Any:
     return value
 
 
-def _normalize_depends_on(value: Any, action_ids: list[str]) -> list[str]:
+def _normalize_depends_on(
+    value: Any,
+    action_ids: list[str],
+    *,
+    current_index: int | None = None,
+) -> list[str]:
     if value in (None, ""):
         return []
     if not isinstance(value, list):
         value = [value]
     dependencies: list[str] = []
     for dependency in value:
+        if dependency is False:
+            continue
         if isinstance(dependency, int):
             if dependency == 0 and action_ids:
                 dependencies.append(action_ids[0])
@@ -131,5 +142,14 @@ def _normalize_depends_on(value: Any, action_ids: list[str]) -> list[str]:
             if 1 <= number <= len(action_ids):
                 dependencies.append(action_ids[number - 1])
                 continue
-        dependencies.append(text)
+        if text.lower() in {"none", "null", "false", "no", "n/a"}:
+            continue
+        if text in action_ids or text.startswith("act_"):
+            dependencies.append(text)
+            continue
+        if current_index is not None and current_index > 0:
+            dependencies.append(action_ids[current_index - 1])
+            continue
+        if action_ids:
+            dependencies.append(action_ids[0])
     return dependencies

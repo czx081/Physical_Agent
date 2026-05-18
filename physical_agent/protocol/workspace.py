@@ -8,7 +8,10 @@ from physical_agent.protocol.markdown import parse_front_matter, render_front_ma
 from physical_agent.protocol.parsers import (
     parse_actions,
     parse_capabilities,
+    parse_chat,
     parse_feedback,
+    parse_memory,
+    parse_plan,
     parse_safety,
     parse_task,
     parse_world,
@@ -16,13 +19,16 @@ from physical_agent.protocol.parsers import (
 from physical_agent.protocol.renderers import (
     render_actions,
     render_capabilities,
+    render_chat,
     render_feedback,
     render_log,
+    render_memory,
+    render_plan,
     render_safety,
     render_task,
     render_world,
 )
-from physical_agent.protocol.schemas import Action, Observation
+from physical_agent.protocol.schemas import Action, ChatMessage, ChatPlan, Observation
 
 
 class Workspace:
@@ -34,6 +40,9 @@ class Workspace:
         "feedback": "FEEDBACK.md",
         "safety": "SAFETY.md",
         "log": "LOG.md",
+        "chat": "CHAT.md",
+        "plan": "PLAN.md",
+        "memory": "MEMORY.md",
     }
 
     def __init__(self, path: str | Path):
@@ -54,6 +63,9 @@ class Workspace:
             "feedback": render_feedback(),
             "safety": render_safety(),
             "log": render_log(),
+            "chat": render_chat(),
+            "plan": render_plan(),
+            "memory": render_memory(),
         }
         for name, content in defaults.items():
             target = self.file(name)
@@ -158,6 +170,63 @@ class Workspace:
     def read_safety(self) -> dict[str, Any]:
         return parse_safety(self.file("safety").read_text(encoding="utf-8"))
 
+    def write_chat(self, messages: list[ChatMessage | dict[str, Any]]) -> None:
+        target = self.file("chat")
+        target.write_text(
+            render_chat(messages, revision=self._next_revision(target)),
+            encoding="utf-8",
+        )
+
+    def read_chat(self) -> dict[str, Any]:
+        return parse_chat(self.file("chat").read_text(encoding="utf-8"))
+
+    def append_chat_message(
+        self,
+        role: str,
+        content: str,
+        *,
+        metadata: dict[str, Any] | None = None,
+    ) -> ChatMessage:
+        messages = list(self.read_chat()["messages"])
+        timestamp = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        message = ChatMessage(
+            role=role,
+            content=content,
+            created_at=timestamp,
+            metadata=metadata or {},
+        )
+        messages.append(message)
+        self.write_chat(messages)
+        return message
+
+    def write_plan(self, plan: ChatPlan | dict[str, Any]) -> None:
+        target = self.file("plan")
+        target.write_text(
+            render_plan(plan, revision=self._next_revision(target)),
+            encoding="utf-8",
+        )
+
+    def read_plan(self) -> dict[str, Any]:
+        return parse_plan(self.file("plan").read_text(encoding="utf-8"))
+
+    def write_memory(self, notes: list[dict[str, Any]]) -> None:
+        target = self.file("memory")
+        target.write_text(
+            render_memory(notes, revision=self._next_revision(target)),
+            encoding="utf-8",
+        )
+
+    def read_memory(self) -> dict[str, Any]:
+        return parse_memory(self.file("memory").read_text(encoding="utf-8"))
+
+    def append_memory_note(self, content: str, *, source: str = "chat") -> dict[str, Any]:
+        notes = list(self.read_memory()["notes"])
+        timestamp = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        note = {"content": content, "source": source, "created_at": timestamp}
+        notes.append(note)
+        self.write_memory(notes)
+        return note
+
     def append_log(self, message: str, *, actor: str | None = None) -> None:
         target = self.file("log")
         if target.exists():
@@ -172,4 +241,3 @@ class Workspace:
         prefix = f"**{actor}**: " if actor else ""
         body += f"## {timestamp}\n\n{prefix}{message}\n"
         target.write_text(render_front_matter(metadata, body), encoding="utf-8")
-

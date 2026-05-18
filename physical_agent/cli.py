@@ -7,6 +7,7 @@ from typing import Optional
 import typer
 import yaml
 
+from physical_agent.agent.chat_runtime import ChatRuntime
 from physical_agent.agent.runtime import AgentRuntime
 from physical_agent.config import DEFAULT_CONFIG_NAME, load_config, write_default_config
 from physical_agent.doctor import doctor_ok, run_doctor
@@ -124,6 +125,49 @@ def run(
             typer.echo(f"- {item.get('action_id')}: {item.get('status')} - {item.get('message')}")
     elif actions and not no_wait:
         typer.echo("No feedback arrived before the timeout. Is `physical-agent watch` running?")
+
+
+@app.command("chat")
+def chat(
+    message: Optional[str] = typer.Option(None, "--message", "-m", help="Send one chat message and exit."),
+    config: Path = typer.Option(Path(DEFAULT_CONFIG_NAME), "--config", "-c", help="Config path."),
+    planner: Optional[str] = typer.Option("auto", "--planner", help="Chat brain: auto, llm, or rule_based."),
+    model: Optional[str] = typer.Option(None, "--model", help="LLM model override for --planner llm."),
+    auto_step: bool = typer.Option(
+        False,
+        "--auto-step",
+        help="Run one watch step after proposed actions are written.",
+    ),
+) -> None:
+    runtime = ChatRuntime(config, planner_name=planner, model=model)
+    if message is not None:
+        result = runtime.respond(message, auto_step=auto_step)
+        typer.echo(result["reply"])
+        if result["actions"]:
+            typer.echo("Proposed actions:")
+            for action in result["actions"]:
+                typer.echo(f"- {action['id']}: {action['robot']}.{action['capability']}")
+        if result["executed"]:
+            typer.echo(f"Watch step executed {result['executed']} action(s).")
+        return
+
+    typer.echo("Physical Agent chat mode. Press Ctrl+C or submit an empty message to exit.")
+    while True:
+        text = input("you> ").strip()
+        if not text:
+            return
+        try:
+            result = runtime.respond(text, auto_step=auto_step)
+        except Exception as exc:
+            typer.echo(f"agent> Chat failed: {exc}")
+            continue
+        typer.echo(f"agent> {result['reply']}")
+        if result["actions"]:
+            typer.echo("agent> Proposed actions:")
+            for action in result["actions"]:
+                typer.echo(f"  - {action['id']}: {action['robot']}.{action['capability']}")
+        if result["executed"]:
+            typer.echo(f"agent> Watch step executed {result['executed']} action(s).")
 
 
 @app.command("llm-test")

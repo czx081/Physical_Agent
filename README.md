@@ -101,6 +101,7 @@ The console provides:
 - workspace reset
 - watch runtime connection
 - one-step action execution
+- multi-turn chat
 - task submission
 - pick/place quick demo
 - doctor checks
@@ -131,6 +132,9 @@ workspace/
   FEEDBACK.md
   SAFETY.md
   LOG.md
+  CHAT.md
+  PLAN.md
+  MEMORY.md
   artifacts/
 ```
 
@@ -147,6 +151,12 @@ workspace/
 `SAFETY.md` is owned by humans and enforced by watch. The agent can read it but cannot bypass it.
 
 `LOG.md` is an audit log for human review.
+
+`CHAT.md` stores chat history between the human and the agent.
+
+`PLAN.md` stores the current chat intent, proposed steps, and proposed actions.
+
+`MEMORY.md` stores small persistent notes that the chat agent should remember across turns.
 
 Static configuration belongs in `physical-agent.yaml`. Dynamic state belongs in the Markdown workspace.
 
@@ -268,6 +278,22 @@ physical-agent run --planner llm --task "pick the red block and place it on the 
 physical-agent inspect
 ```
 
+Use the full chat agent:
+
+```bash
+physical-agent setup --force
+physical-agent chat
+```
+
+Or send one message and exit:
+
+```bash
+physical-agent chat --message "What can you see right now?"
+physical-agent chat --planner llm --auto-step --message "Please pick the red block and place it on the tray."
+```
+
+The chat command defaults to `--planner auto`: it uses the LLM planner when `.env` contains API settings and falls back to rule-based chat otherwise. The chat agent reads `CHAT.md`, `MEMORY.md`, `CAPABILITIES.md`, `WORLD.md`, and `FEEDBACK.md`. It writes replies back to `CHAT.md`, writes its current intent to `PLAN.md`, and writes proposed actions to `ACTIONS.md`. Watch still validates and executes those actions.
+
 Execute the proposed actions by running watch in another terminal:
 
 ```bash
@@ -302,3 +328,5 @@ pytest -q
 ```
 
 Current coverage includes Markdown protocol parsing/rendering, workspace lifecycle, driver manifest and loader behavior, safety validation, mock drivers, rule-based planning, watch runtime stepping, the end-to-end Markdown loop, one-command setup, doctor checks, and GUI HTTP endpoints.
+
+It also covers the chat protocol, chat memory, chat action proposals, chat auto-step execution, and the GUI chat endpoint.

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from physical_agent.protocol.markdown import fenced_yaml, render_front_matter
-from physical_agent.protocol.schemas import Action, Observation
+from physical_agent.protocol.schemas import Action, ChatMessage, ChatPlan, Observation
 
 
 def _as_plain(value: Any) -> Any:
@@ -140,3 +140,33 @@ def render_log(body: str = "# Physical Agent Log\n", *, revision: int = 1) -> st
     }
     return render_front_matter(metadata, body)
 
+
+def render_chat(messages: list[ChatMessage | dict[str, Any]] | None = None, *, revision: int = 1) -> str:
+    metadata = {
+        "schema": "physical-agent/chat/v1",
+        "owner": "agent",
+        "revision": revision,
+    }
+    body = "# Chat\n\n## Messages\n\n" f"{fenced_yaml(_as_plain(messages or []))}\n"
+    return render_front_matter(metadata, body)
+
+
+def render_plan(plan: ChatPlan | dict[str, Any] | None = None, *, revision: int = 1) -> str:
+    metadata = {
+        "schema": "physical-agent/plan/v1",
+        "owner": "agent",
+        "revision": revision,
+    }
+    value = plan or ChatPlan()
+    body = "# Plan\n\n## Current\n\n" f"{fenced_yaml(_as_plain(value))}\n"
+    return render_front_matter(metadata, body)
+
+
+def render_memory(notes: list[dict[str, Any]] | None = None, *, revision: int = 1) -> str:
+    metadata = {
+        "schema": "physical-agent/memory/v1",
+        "owner": "agent",
+        "revision": revision,
+    }
+    body = "# Memory\n\n## Notes\n\n" f"{fenced_yaml(notes or [])}\n"
+    return render_front_matter(metadata, body)

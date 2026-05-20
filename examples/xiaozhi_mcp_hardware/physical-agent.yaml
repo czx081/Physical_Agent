@@ -1,0 +1,29 @@
+project:
+  name: xiaozhi-mcp-hardware
+
+workspace:
+  path: ./workspace
+
+watch:
+  tick_ms: 500
+  require_human_approval: false
+
+agent:
+  planner: rule_based
+  model: fake/local
+  max_steps: 8
+  feedback_timeout_s: 30
+
+robots:
+  xiaozhi_1:
+    driver: .
+    config:
+      mode: mock
+      device_name: xiaozhi-demo-device
+      tool_prefix: self.device
+      endpoint_env: XIAOZHI_MCP_ENDPOINT
+      token_env: XIAOZHI_MCP_TOKEN
+      tools:
+        observe: self.device.observe
+        say: self.audio.speaker.speak
+        set_light: self.light.set_rgb

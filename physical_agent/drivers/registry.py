@@ -10,6 +10,7 @@ from physical_agent.protocol.schemas import DriverManifest
 BUILTIN_DRIVERS = {
     "mock_arm": ("physical_agent.drivers.mock_arm", "MockArmDriver"),
     "mock_rover": ("physical_agent.drivers.mock_rover", "MockRoverDriver"),
+    "xiaozhi_mcp": ("physical_agent.drivers.xiaozhi_mcp", "XiaozhiMcpDriver"),
 }
 
 
@@ -38,4 +39,3 @@ def get_builtin_manifest(name: str) -> DriverManifest:
     module_name, _ = BUILTIN_DRIVERS[name]
     module = import_module(module_name)
     return DriverManifest.model_validate(module.MANIFEST)
-

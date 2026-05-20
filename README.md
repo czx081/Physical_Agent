@@ -190,6 +190,12 @@ Create a new local driver scaffold:
 physical-agent driver new my_arm_driver
 ```
 
+For a hardware onboarding example based on a Xiaozhi MCP bridge, see:
+
+```text
+examples/xiaozhi_mcp_hardware/
+```
+
 Use it from `physical-agent.yaml`:
 
 ```yaml
@@ -198,6 +204,8 @@ robots:
     driver: ./my_arm_driver
     config: {}
 ```
+
+The example shows a safe path from `mode: mock` to `mode: http`, with a `.env.example` file for `XIAOZHI_MCP_ENDPOINT` and optional `XIAOZHI_MCP_TOKEN`.
 
 ## Built-In Drivers
 
@@ -216,6 +224,12 @@ It maintains a simulated pose, held object, and object map. The default quicksta
 - `move_to`
 
 It demonstrates that the driver protocol is not arm-specific.
+
+If you are onboarding a teammate to a Xiaozhi MCP-style hardware bridge, start with:
+
+```text
+examples/xiaozhi_mcp_hardware/README.md
+```
 
 ## Safety Gate
 

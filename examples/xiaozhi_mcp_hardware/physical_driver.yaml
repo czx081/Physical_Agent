@@ -1,0 +1,57 @@
+schema: physical-agent/driver/v1
+
+name: xiaozhi_mcp_hardware
+version: 0.1.0
+description: Local hardware example for a Xiaozhi MCP bridge.
+
+entrypoint:
+  module: driver
+  class: XiaozhiMcpDriver
+
+robot:
+  kind: mcp_device
+  supports_simulation: true
+
+config_schema:
+  type: object
+  properties:
+    mode:
+      type: string
+      enum: [mock, http]
+      default: mock
+    endpoint_env:
+      type: string
+      default: XIAOZHI_MCP_ENDPOINT
+    token_env:
+      type: string
+      default: XIAOZHI_MCP_TOKEN
+    timeout_s:
+      type: number
+      minimum: 1
+      default: 10
+    device_name:
+      type: string
+      default: xiaozhi-device
+    tool_prefix:
+      type: string
+      default: self.device
+    tools:
+      type: object
+      properties:
+        observe:
+          type: string
+        say:
+          type: string
+        set_light:
+          type: string
+      additionalProperties:
+        type: string
+    mock_state:
+      type: object
+  additionalProperties: false
+
+dependencies:
+  python: []
+
+capability_contract:
+  source: runtime

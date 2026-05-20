@@ -25,6 +25,8 @@ class RuleBasedPlanner(Planner):
         wants_pick = any(word in text for word in ("pick", "grasp"))
         wants_place = any(word in text for word in ("place", "drop"))
         wants_move = bool(re.search(r"\b(move|go)\b", text))
+        wants_say = any(word in text for word in ("say", "speak", "tts", "播报", "说"))
+        wants_light = any(word in text for word in ("light", "rgb", "led", "灯"))
 
         if wants_observe:
             robot_id = self._choose_robot(robots, ["observe"])
@@ -81,6 +83,32 @@ class RuleBasedPlanner(Planner):
                     )
                 )
 
+        if wants_say:
+            robot_id = self._choose_robot(robots, ["say"])
+            if robot_id:
+                actions.append(
+                    Action(
+                        id=self._action_id(len(actions) + 1),
+                        robot=robot_id,
+                        capability="say",
+                        params={"text": self._speech_text(task)},
+                        reason="The task asks the device to speak.",
+                    )
+                )
+
+        if wants_light:
+            robot_id = self._choose_robot(robots, ["set_light"])
+            if robot_id:
+                actions.append(
+                    Action(
+                        id=self._action_id(len(actions) + 1),
+                        robot=robot_id,
+                        capability="set_light",
+                        params=self._light_params(text),
+                        reason="The task asks to change a light.",
+                    )
+                )
+
         return actions
 
     def _choose_robot(self, robots: dict[str, Any], required: list[str]) -> str | None:
@@ -134,3 +162,32 @@ class RuleBasedPlanner(Planner):
             params[name] = numbers[index] if index < len(numbers) else 0.0
         return params
 
+    def _speech_text(self, task: str) -> str:
+        match = re.search(r'["“](.+?)["”]', task)
+        if match:
+            return match.group(1).strip()
+        match = re.search(r"(?:say|speak|播报|说)\s+(.+)$", task, flags=re.IGNORECASE)
+        if match:
+            return match.group(1).strip()[:120]
+        return task.strip()[:120]
+
+    def _light_params(self, text: str) -> dict[str, int]:
+        numbers = [int(value) for value in re.findall(r"\b(?:25[0-5]|2[0-4]\d|1?\d?\d)\b", text)]
+        if len(numbers) >= 3:
+            return {"r": numbers[0], "g": numbers[1], "b": numbers[2]}
+        colors = {
+            "red": {"r": 255, "g": 0, "b": 0},
+            "green": {"r": 0, "g": 180, "b": 0},
+            "blue": {"r": 0, "g": 90, "b": 255},
+            "white": {"r": 255, "g": 255, "b": 255},
+            "yellow": {"r": 255, "g": 210, "b": 0},
+            "红": {"r": 255, "g": 0, "b": 0},
+            "绿": {"r": 0, "g": 180, "b": 0},
+            "蓝": {"r": 0, "g": 90, "b": 255},
+            "白": {"r": 255, "g": 255, "b": 255},
+            "黄": {"r": 255, "g": 210, "b": 0},
+        }
+        for name, params in colors.items():
+            if name in text:
+                return params
+        return {"r": 255, "g": 255, "b": 255}

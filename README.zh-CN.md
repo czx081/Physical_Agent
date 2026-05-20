@@ -232,7 +232,7 @@ robots:
 
 它用于证明架构不只适用于机械臂，也可以支持其他类型设备。
 
-如果你要给同事演示“小智 MCP”式硬件接入，先看：
+“小智 MCP”式硬件接入：
 
 ```text
 examples/xiaozhi_mcp_hardware/README.zh-CN.md

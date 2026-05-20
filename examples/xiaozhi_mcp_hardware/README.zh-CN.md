@@ -95,7 +95,7 @@ XIAOZHI_MCP_TOKEN=如果需要鉴权就填
 
 这些能力会写进 `CAPABILITIES.md`。agent 只能看到这些 Markdown 文档，不会直接碰硬件。
 
-## 同事最应该记住的几句话
+## 最应该记住的几句话
 
 ```text
 1. 先跑 mock。

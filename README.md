@@ -344,7 +344,7 @@ Create a new local driver scaffold:
 physical-agent driver new my_arm_driver
 ```
 
-If your teammate already has a GitHub repo, local SDK checkout, or mature Python package, let Physical Agent create the first integration draft:
+If a hardware project already has a GitHub repo, local SDK checkout, or mature Python package, let Physical Agent create the first integration draft:
 
 ```bash
 physical-agent integrate ./vendor_sdk --name my_device_driver
@@ -400,7 +400,7 @@ It maintains a simulated pose, held object, and object map. The default quicksta
 
 It demonstrates that the driver protocol is not arm-specific.
 
-If you are onboarding a teammate to a Xiaozhi MCP-style hardware bridge, start with:
+For a Xiaozhi MCP-style hardware bridge example, start with:
 
 ```text
 examples/xiaozhi_mcp_hardware/README.md

@@ -85,7 +85,7 @@ Smoke test passed: executed 2 action(s), red_block location is tray.
 
 ### 2. 先用 GUI 跑通
 
-GUI 是给新同事最友好的入口：
+GUI 是面向新用户最友好的入口：
 
 ```bash
 physical-agent gui
@@ -211,7 +211,7 @@ robots:
 
 ## 硬件接入助手
 
-如果你的同事已经有 GitHub 仓库、本地 SDK checkout，或者成熟 Python 包，可以让 Physical Agent 先生成第一版接入脚手架：
+如果一个硬件项目已经有 GitHub 仓库、本地 SDK checkout，或者成熟 Python 包，可以让 Physical Agent 先生成第一版接入脚手架：
 
 ```bash
 physical-agent integrate ./vendor_sdk --name my_device_driver

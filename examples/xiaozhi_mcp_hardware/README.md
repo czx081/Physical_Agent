@@ -101,7 +101,7 @@ If your MCP bridge exposes a non-HTTP transport, keep the Physical Agent side un
 
 Those capabilities are published into `CAPABILITIES.md`, so the agent only sees Markdown and never touches hardware directly.
 
-## What Your Teammate Should Remember
+## What Integrators Should Remember
 
 ```text
 1. Start from physical-agent.yaml.
@@ -137,7 +137,7 @@ You can copy `examples/xiaozhi_mcp_hardware/` as a starting point and then:
 3. Replace `observe`, `say`, and `set_light` with your actual capability set.
 4. Swap `_post_jsonrpc()` for your real transport if needed.
 
-In practice, teammates only need two files:
+In practice, integrators only need two files:
 
 ```text
 physical_driver.yaml

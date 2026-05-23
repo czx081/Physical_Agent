@@ -3,6 +3,7 @@ from shutil import copytree
 
 import asyncio
 
+from physical_agent.drivers import xiaozhi_mcp as xiaozhi_mcp_module
 from physical_agent.watch.runtime import WatchRuntime
 
 
@@ -16,7 +17,27 @@ def test_xiaozhi_example_files_exist():
     assert (base / "driver.py").exists()
 
 
-def test_xiaozhi_example_watch_runtime_setup(tmp_path):
+def test_xiaozhi_example_watch_runtime_setup(monkeypatch, tmp_path):
+    class FakeWsClient:
+        def __init__(self, url, *, connect_timeout_s, timeout_s):
+            self.url = url
+            self.is_connected = False
+            self._next_id = 1
+
+        def connect(self):
+            self.is_connected = True
+
+        def close(self):
+            self.is_connected = False
+
+        def send_tool_call(self, name, arguments=None):
+            request_id = self._next_id
+            self._next_id += 1
+            return request_id
+
+    monkeypatch.setattr(xiaozhi_mcp_module, "XiaozhiMcpWebSocketClient", FakeWsClient)
+    monkeypatch.setenv("XIAOZHI_MCP_URL", "ws://127.0.0.1:8080/ws")
+
     example_dir = Path("examples/xiaozhi_mcp_hardware").resolve()
     copied_dir = tmp_path / "xiaozhi_mcp_hardware"
     copytree(example_dir, copied_dir)
@@ -27,4 +48,4 @@ def test_xiaozhi_example_watch_runtime_setup(tmp_path):
     assert runtime.workspace is not None
     capabilities = runtime.workspace.read_capabilities()
     assert "xiaozhi_1" in capabilities["robots"]
-    assert any(cap["name"] == "say" for cap in capabilities["robots"]["xiaozhi_1"]["capabilities"])
+    assert any(cap["name"] == "otto_action" for cap in capabilities["robots"]["xiaozhi_1"]["capabilities"])

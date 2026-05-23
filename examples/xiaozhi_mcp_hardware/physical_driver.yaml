@@ -17,7 +17,7 @@ config_schema:
   properties:
     mode:
       type: string
-      enum: [mock, http]
+      enum: [mock, http, ws]
       default: mock
     endpoint_env:
       type: string
@@ -25,24 +25,57 @@ config_schema:
     token_env:
       type: string
       default: XIAOZHI_MCP_TOKEN
+    ws_url_env:
+      type: string
+      default: XIAOZHI_MCP_URL
+    host_env:
+      type: string
+      default: XIAOZHI_MCP_HOST
+    port_env:
+      type: string
+      default: XIAOZHI_MCP_PORT
+    path_env:
+      type: string
+      default: XIAOZHI_MCP_PATH
     timeout_s:
       type: number
       minimum: 1
       default: 10
+    connect_timeout_s:
+      type: number
+      minimum: 0.1
+      default: 2
+    wait_for_responses:
+      type: boolean
+      default: true
     device_name:
       type: string
       default: xiaozhi-device
     tool_prefix:
       type: string
       default: self.device
+    url:
+      type: string
+    host:
+      type: string
+    port:
+      type: integer
+      minimum: 1
+      maximum: 65535
+    path:
+      type: string
     tools:
       type: object
       properties:
         observe:
           type: string
-        say:
+        set_volume:
           type: string
-        set_light:
+        otto_action:
+          type: string
+        home:
+          type: string
+        stop:
           type: string
       additionalProperties:
         type: string

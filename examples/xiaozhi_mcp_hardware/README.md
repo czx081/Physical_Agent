@@ -20,6 +20,7 @@ The example driver is `xiaozhi_mcp`. It supports:
 
 - `mock` mode for local end-to-end testing without hardware
 - `http` mode for a real MCP endpoint
+- `ws` mode for a robot that exposes a local WebSocket MCP socket directly
 
 ## Layout
 
@@ -81,6 +82,39 @@ physical-agent run --task "turn the light red"
 The rule-based planner will turn the request into structured actions, and watch will execute them.
 
 ## Connect Real Xiaozhi MCP Hardware
+
+If your robot exposes MCP directly over LAN WebSocket, such as
+`ws://192.168.66.237:8080/ws`, prefer `mode: ws`:
+
+```yaml
+robots:
+  xiaozhi_1:
+    driver: .
+    config:
+      mode: ws
+      wait_for_responses: false
+```
+
+Then set either a full URL:
+
+```env
+XIAOZHI_MCP_URL=ws://192.168.66.237:8080/ws
+```
+
+or split host/port/path values:
+
+```env
+XIAOZHI_MCP_HOST=192.168.66.237
+XIAOZHI_MCP_PORT=8080
+XIAOZHI_MCP_PATH=/ws
+```
+
+Some devices accept tool calls but do not return standard responses for
+`initialize` or `tools/list`. In that case, keep `wait_for_responses: false`
+so watch uses fire-and-forget control.
+
+If your MCP bridge exposes an HTTP JSON-RPC endpoint instead, use `mode: http`
+and keep the original endpoint-based configuration:
 
 Copy `.env.example` to `.env` and fill in the real endpoint:
 

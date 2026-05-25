@@ -1,0 +1,90 @@
+schema: physical-agent/driver/v1
+
+name: momoagent_driver
+version: 0.1.0
+description: Watch-side serial driver scaffold for the MomoAgent robotic arm.
+
+entrypoint:
+  module: driver
+  class: MomoagentDriver
+
+robot:
+  kind: arm
+  supports_simulation: true
+
+config_schema:
+  type: object
+  properties:
+    mode:
+      type: string
+      enum:
+      - mock
+      - hardware
+      default: mock
+    hardware_profile:
+      type: string
+      enum:
+      - full
+      - partial
+      default: full
+    mock_state:
+      type: object
+    sdk_repo:
+      type: string
+      description: Local path to the MomoAgent repository checkout.
+      default: /home/houzhinan/MomoAgent
+    runtime_config:
+      type: string
+      description: Path to the MomoAgent runtime YAML, usually runtime/soarm_moce_serial.local.yaml.
+    serial_port:
+      type: string
+      description: Serial port override for partial hardware mode.
+    partial_joint_name:
+      type: string
+      default: wrist_roll
+    partial_joint_id:
+      type: integer
+      minimum: 1
+      maximum: 254
+      default: 5
+    partial_joint_reduction_ratio:
+      type: number
+      default: 1.0
+    gripper_available:
+      type: boolean
+      default: true
+    gripper_id:
+      type: integer
+      minimum: 1
+      maximum: 254
+      default: 6
+    partial_gripper_open_raw:
+      type: integer
+      description: Optional direct raw Goal_Position for the open pose in partial hardware mode.
+    partial_gripper_close_raw:
+      type: integer
+      description: Optional direct raw Goal_Position for the closed pose in partial hardware mode.
+    calibration_path:
+      type: string
+      description: Optional path to the MomoAgent calibration JSON used for gripper ratio conversion.
+    speed_percent:
+      type: number
+      minimum: 1
+      maximum: 100
+      default: 30
+    timeout_s:
+      type: number
+      minimum: 1
+      default: 5
+    release_torque_on_disconnect:
+      type: boolean
+      default: false
+  required:
+  - mode
+  additionalProperties: false
+
+dependencies:
+  python: []
+
+capability_contract:
+  source: runtime

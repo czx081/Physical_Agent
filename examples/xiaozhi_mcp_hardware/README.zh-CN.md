@@ -1,80 +1,84 @@
-# 小智 MCP 硬件接入示例
+# 小智机器人接入与操作说明
 
-这个示例演示如何把一个“小智 MCP”设备接入到 Physical Agent。
+这份说明基于当前目录下的真实小智接入配置整理，目标是帮助你从进入虚拟环境开始，一步一步完成：
 
-最重要的边界很简单：
+1. 激活项目环境
+2. 更新小智连接信息
+3. 启动 `watch`
+4. 让 Physical Agent 控制小智做动作
 
-```text
-agent 只把意图写进 Markdown workspace。
-watch 负责加载 driver、执行安全检查，再去调用硬件或 MCP 网关。
-```
+## 1. 进入项目并激活虚拟环境
 
-这个目录本身就是一个完整的 two-file driver 示例，它包含：
-
-```text
-physical_driver.yaml
-driver.py
-```
-
-示例 driver 名称是 `xiaozhi_mcp`，支持两种模式：
-
-- `mock`：本地联调，不需要真实硬件
-- `http`：连接真实的 MCP 接入点
-
-## 目录结构
-
-```text
-examples/xiaozhi_mcp_hardware/
-  physical_driver.yaml
-  driver.py
-  physical-agent.yaml
-  .env.example
-  README.zh-CN.md
-```
-
-## 快速开始
-
-先在仓库根目录安装并初始化项目：
+先进入项目根目录：
 
 ```bash
-physical-agent init
+cd /home/houzhinan/Physical_Agent/Physical_Agent
 ```
 
-如果你想单独跑这个示例，直接进入这个目录，把 `physical-agent.yaml` 当作该目录下的配置使用即可。
+再激活虚拟环境：
 
-## 先用 mock 跑通
+```bash
+source .venv/bin/activate
+```
 
-示例配置默认使用：
+如果终端前面出现 `(.venv)`，说明虚拟环境已经生效。
+
+## 2. 确认当前示例目录
+
+本次小智接入示例目录是：
+
+```text
+~/Physical_Agent/Physical_Agent/examples/xiaozhi_mcp_hardware
+```
+
+这个目录里最关键的几个文件是：
+
+- `physical-agent.yaml`
+- `.env`
+- `physical_driver.yaml`
+- `driver.py`
+- `xiaozhi_mcp_driver.py`
+
+其中：
+
+- `physical-agent.yaml` 负责项目装配和机器人配置
+- `.env` 负责保存小智的地址和连接参数
+- `physical_agent/drivers/xiaozhi_mcp.py` 是当前项目真正使用的 driver 实现
+- `xiaozhi_mcp_driver.py` 是开发者给的参考实现，主要用来说明小智局域网 MCP 的通信方式
+
+## 3. 更新环境变量
+### 接入真实的小智 MCP
+
+当前这台小智走的是局域网 WebSocket MCP，不是 HTTP `/mcp`。
+如果你的设备直接在局域网暴露 WebSocket MCP，例如 `ws://192.168.66.237:8080/ws`，推荐使用 `ws` 模式：
 
 ```yaml
 robots:
   xiaozhi_1:
     driver: .
     config:
-      mode: mock
+      mode: ws
+      wait_for_responses: false
 ```
 
-在示例目录里启动 watch：
+并在 `.env` 中填写：
 
-```bash
-physical-agent watch --config examples/xiaozhi_mcp_hardware/physical-agent.yaml
+```env
+XIAOZHI_MCP_URL=ws://192.168.66.237:8080/ws
 ```
 
-另开一个终端提交任务：
+也可以拆成：
 
-```bash
-physical-agent run --config examples/xiaozhi_mcp_hardware/physical-agent.yaml --task "让设备说 hello"
+```env
+XIAOZHI_MCP_HOST=192.168.66.237
+XIAOZHI_MCP_PORT=8080
+XIAOZHI_MCP_PATH=/ws
 ```
 
-或者：
+有些设备只接受工具调用，但不会对 `initialize` / `tools/list` 返回标准响应。遇到这种情况，保持
+`wait_for_responses: false`，让 watch 使用“只发送不等待回包”的模式。
 
-```bash
-physical-agent run --config examples/xiaozhi_mcp_hardware/physical-agent.yaml --task "把灯调成 red"
-```
-
-rule-based planner 会把任务翻译成结构化动作，watch 再去执行。
-
-## 接入真实的小智 MCP
+如果你的接入方式是 HTTP JSON-RPC 网关，再使用 `http` 模式：
 
 先把 `.env.example` 复制成 `.env`，再填写真实地址：
 
@@ -85,25 +89,262 @@ XIAOZHI_MCP_TOKEN=如果需要鉴权就填
 
 如果你的 MCP 网关不是 HTTP JSON-RPC，而是 WebSocket、串口或别的协议，建议先加一个很薄的桥接层，把外部协议转换成这个示例 driver 里使用的 JSON-RPC 调用格式。
 
-## 这个 driver 做了什么
 
-`xiaozhi_mcp` 提供三个能力：
+## 4. 先做一次检查
 
-- `observe`：读取设备状态
-- `say`：让设备播报一句话
-- `set_light`：控制 RGB 灯光
+建议先跑一次 `doctor`：
 
-这些能力会写进 `CAPABILITIES.md`。agent 只能看到这些 Markdown 文档，不会直接碰硬件。
+```bash
+physical-agent doctor --config examples/xiaozhi_mcp_hardware/physical-agent.yaml
+```
 
-## 最应该记住的几句话
+如果这里报错，先不要启动 `watch`，先检查：
+
+- 虚拟环境是否已激活
+- `.env` 是否写对
+- `physical-agent.yaml` 是否仍是 `ws` 模式
+
+## 5. 启动 watch
+
+在终端 A 中运行：
+
+```bash
+cd ~/Physical_Agent/Physical_Agent
+source .venv/bin/activate
+physical-agent watch --config examples/xiaozhi_mcp_hardware/physical-agent.yaml
+```
+
+如果启动正常，终端会停在运行状态，不会立即退出。
+
+`watch` 的职责是：
+
+- 加载 driver
+- 监听 workspace 中的新动作
+- 把动作翻译成对小智的 MCP 调用
+
+## 6. 查看当前机器人状态
+
+新开终端 B，运行：
+
+```bash
+cd ~/Physical_Agent/Physical_Agent
+source .venv/bin/activate
+physical-agent inspect --config examples/xiaozhi_mcp_hardware/physical-agent.yaml
+```
+
+如果连接正常，通常会看到类似：
 
 ```text
-1. 先跑 mock。
-2. driver 放在 watch 侧。
-3. 先改 physical-agent.yaml，再改 .env。
-4. 真正的硬件调用留在 driver.py。
-5. agent 只写 workspace，不直接调用硬件 SDK。
+xiaozhi-demo-device is connected over local MCP WebSocket in fire-and-forget mode.
 ```
+
+## 7. 让小智做动作
+
+再在终端 B 中通过自然语言下发任务。
+
+### 推荐先测试这些明显动作
+
+挥手：
+
+```bash
+physical-agent run --config examples/xiaozhi_mcp_hardware/physical-agent.yaml --task "wave"
+```
+
+停止当前动作：
+
+```bash
+physical-agent run --config examples/xiaozhi_mcp_hardware/physical-agent.yaml --task "stop"
+```
+
+向前走两步：
+
+```bash
+physical-agent run --config examples/xiaozhi_mcp_hardware/physical-agent.yaml --task "walk forward 2 steps"
+```
+
+向左转两步：
+
+```bash
+physical-agent run --config examples/xiaozhi_mcp_hardware/physical-agent.yaml --task "turn left 2 steps"
+```
+
+## 8. 用 GUI 测试和操控小智
+
+除了命令行，你也可以直接用这个项目自带的 GUI 做测试。
+
+先在终端中启动 GUI：
+
+```bash
+cd /home/houzhinan/Physical_Agent/Physical_Agent
+source .venv/bin/activate
+physical-agent gui --config examples/xiaozhi_mcp_hardware/physical-agent.yaml
+```
+
+默认会启动一个本地网页服务，通常地址类似：
+
+```text
+http://127.0.0.1:8765
+```
+
+如果浏览器没有自动打开，就手动访问这个地址。
+
+### GUI 里怎么操作
+
+进入页面后，建议按下面顺序测试：
+
+1. 点击右上角 `中文`，切换到中文界面
+2. 点击 `初始化`
+3. 点击 `启动 watch`
+4. 在左侧 `对话` 输入框里输入动作指令
+5. 勾选 `执行一次 watch step`
+6. 点击 `发送`
+
+推荐先测试这些指令：
+
+- `wave`
+- `go home`
+- `stop`
+- `walk forward 2 steps`
+- `turn left 2 steps`
+- `set volume to 35`
+
+### GUI 里能看到什么
+
+GUI 里你可以同时看到：
+
+- `世界状态`
+- 当前机器人能力
+- `动作`
+- `反馈`
+- `系统详情`
+
+这对排查“命令有没有发出去”很有帮助。
+
+## 9. 当前可用的主要能力
+
+这台小智当前已经确认走的是动作能力，不是 `say` 和 `set_light`。
+
+当前接入里主要使用这些 capability：
+
+- `observe`
+- `set_volume`
+- `otto_action`
+- `home`
+- `stop`
+
+它们和底层 tool 的对应关系是：
+
+- `observe -> self.get_device_status`
+- `set_volume -> self.audio_speaker.set_volume`
+- `otto_action -> self.otto.action`
+- `home -> self.otto.action`
+- `stop -> self.otto.stop`
+
+其中 `otto_action` 下面可以继续承载具体动作，例如：
+
+- `hand_wave`
+- `walk`
+- `turn`
+- `jump`
+- `greeting`
+
+## 10. 常用查看命令
+
+查看最近状态：
+
+```bash
+physical-agent inspect --config examples/xiaozhi_mcp_hardware/physical-agent.yaml
+```
+
+如果你想重新初始化 workspace，清掉旧的 mock 或旧动作历史，可以执行：
+
+```bash
+physical-agent setup --config examples/xiaozhi_mcp_hardware/physical-agent.yaml --force
+```
+
+然后重新启动 `watch`。
+
+## 11. 一个完整的最小流程
+
+### 终端 A
+
+```bash
+cd /home/houzhinan/Physical_Agent/Physical_Agent
+source .venv/bin/activate
+physical-agent watch --config examples/xiaozhi_mcp_hardware/physical-agent.yaml
+```
+
+### 终端 B
+
+```bash
+cd /home/houzhinan/Physical_Agent/Physical_Agent
+source .venv/bin/activate
+physical-agent inspect --config examples/xiaozhi_mcp_hardware/physical-agent.yaml
+physical-agent run --config examples/xiaozhi_mcp_hardware/physical-agent.yaml --task "wave"
+physical-agent run --config examples/xiaozhi_mcp_hardware/physical-agent.yaml --task "go home"
+physical-agent run --config examples/xiaozhi_mcp_hardware/physical-agent.yaml --task "stop"
+```
+
+如果机器人有真实动作，说明接入已经成功。
+
+### 终端 C（可选，GUI）
+
+```bash
+cd /home/houzhinan/Physical_Agent/Physical_Agent
+source .venv/bin/activate
+physical-agent gui --config examples/xiaozhi_mcp_hardware/physical-agent.yaml
+```
+
+然后在浏览器里输入：
+
+- `wave`
+- `go home`
+- `stop`
+
+如果机器人有真实动作，说明 GUI 方式也已经接入成功。
+
+## 12. 常见问题
+
+### 1. `watch` 启动时报错
+
+先检查：
+
+- 小智是否开机并连到和电脑相同的 Wi-Fi
+- `.env` 里的 IP 是否正确
+- 是否仍然使用 `/ws`
+- 是否有另一个 `watch` 进程已经占用同一套 workspace
+
+### 2. `run` 显示 completed，但机器人没反应
+
+这通常说明：
+
+- 命令已经发出
+- 但底层 tool 名或参数可能和设备实际支持的不一致
+
+这时优先检查：
+
+- `physical-agent.yaml` 中的 `tools` 映射
+- 当前任务是否命中了正确 capability
+
+### 3. `inspect` 里出现旧的 mock 记录
+
+这是因为 workspace 里还留着旧历史。执行：
+
+```bash
+physical-agent setup --config examples/xiaozhi_mcp_hardware/physical-agent.yaml --force
+```
+
+再重新启动 `watch` 即可。
+
+### 4. GUI 打开了，但机器人没反应
+
+先检查：
+
+- 页面里是否已经点了 `启动 watch`
+- 发送消息时是否勾选了 `执行一次 watch step`
+- `physical-agent.yaml` 是否仍然指向当前小智配置
+- 终端里的 `watch` 或 GUI 后台是否有报错
+
 
 ## 排查顺序
 

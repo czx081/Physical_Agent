@@ -1,0 +1,40 @@
+project:
+  name: momoagent-driver-mock
+
+workspace:
+  path: ./workspace
+
+watch:
+  tick_ms: 500
+  require_human_approval: false
+
+agent:
+  planner: rule_based
+  model: fake/local
+  max_steps: 8
+  feedback_timeout_s: 30
+
+robots:
+  momo_1:
+    driver: .
+    config:
+      mode: mock
+      sdk_repo: /home/houzhinan/MomoAgent
+      runtime_config: /home/houzhinan/MomoAgent/runtime/soarm_moce_serial.local.yaml
+      speed_percent: 30
+      timeout_s: 5
+      release_torque_on_disconnect: false
+      mock_state:
+        joints_deg:
+          shoulder_pan: 0.0
+          shoulder_lift: 0.0
+          elbow_flex: 0.0
+          wrist_flex: 0.0
+          wrist_roll: 0.0
+        tcp_pose:
+          x: 0.0
+          y: 0.0
+          z: 0.25
+        gripper:
+          available: true
+          open_ratio: 1.0

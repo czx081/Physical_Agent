@@ -1,0 +1,35 @@
+project:
+  name: momoagent-driver-partial-wrist-gripper
+
+workspace:
+  path: ./workspace-partial-wrist-gripper
+
+watch:
+  tick_ms: 500
+  require_human_approval: false
+
+agent:
+  planner: rule_based
+  model: fake/local
+  max_steps: 8
+  feedback_timeout_s: 30
+
+robots:
+  momo_1:
+    driver: .
+    config:
+      mode: hardware
+      hardware_profile: partial
+      sdk_repo: /home/houzhinan/MomoAgent
+      runtime_config: /home/houzhinan/MomoAgent/runtime/soarm_moce_serial.local.yaml
+      serial_port: /dev/serial/by-id/usb-1a86_USB_Single_Serial_5B61036646-if00
+      partial_joint_name: wrist_roll
+      partial_joint_id: 5
+      partial_joint_reduction_ratio: 1.0
+      gripper_available: true
+      gripper_id: 6
+      partial_gripper_open_raw: 2087
+      partial_gripper_close_raw: 1967
+      speed_percent: 20
+      timeout_s: 5
+      release_torque_on_disconnect: false

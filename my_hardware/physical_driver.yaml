@@ -1,0 +1,24 @@
+schema: physical-agent/driver/v1
+
+name: my_hardware
+version: 0.1.0
+description: Local Physical Agent driver.
+
+entrypoint:
+  module: driver
+  class: MyHardwareDriver
+
+robot:
+  kind: generic
+  supports_simulation: true
+
+config_schema:
+  type: object
+  properties: {}
+  additionalProperties: true
+
+dependencies:
+  python: []
+
+capability_contract:
+  source: runtime

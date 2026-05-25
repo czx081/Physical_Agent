@@ -5,12 +5,15 @@ import re
 from pathlib import Path
 from typing import Any
 
+from physical_agent.agent.code_runtime import CodeSkillRuntime
+from physical_agent.agent.driver_coder import DriverCodingAgent
 from physical_agent.agent.llm_planner import _json_safe, _normalize_depends_on
 from physical_agent.agent.onboarding import HardwareIntegrationAssistant
 from physical_agent.agent.rule_based import RuleBasedPlanner
+from physical_agent.agent.skills import SkillRouter
 from physical_agent.config import DEFAULT_CONFIG_NAME, PhysicalAgentConfig, load_config, write_default_config
 from physical_agent.llm import OpenAICompatibleClient, OpenAICompatibleSettings
-from physical_agent.protocol.schemas import Action, ChatMessage, ChatPlan
+from physical_agent.protocol.schemas import Action, ChatMessage, ChatPlan, CodeTaskResult
 from physical_agent.protocol.workspace import Workspace
 from physical_agent.watch.runtime import WatchRuntime
 
@@ -31,6 +34,8 @@ class ChatRuntime:
         self.workspace: Workspace | None = None
         self.rule_planner = RuleBasedPlanner()
         self.llm_client: OpenAICompatibleClient | None = None
+        self.code_runtime: CodeSkillRuntime | None = None
+        self.skill_router: SkillRouter | None = None
 
     def setup(self) -> None:
         if not self.config_path.exists():
@@ -43,6 +48,74 @@ class ChatRuntime:
         self.setup()
         workspace = self._workspace()
         workspace.append_chat_message("user", message)
+
+        code_result = self._maybe_handle_code_task(message)
+        if code_result is not None:
+            code_result_data = code_result.model_dump(mode="json")
+            if code_result.intent_kind == "sdk_integration":
+                integration = dict(code_result_data.get("integration") or {})
+                plan = ChatPlan(
+                    status="answered",
+                    intent="integrate",
+                    summary=code_result.summary,
+                    steps=[
+                        f"Generated files: {', '.join(code_result.changed_files) or 'none'}",
+                        f"Tests run: {', '.join(code_result.tests_run) or 'none'}",
+                    ],
+                    actions=[],
+                    needs_watch=False,
+                )
+                workspace.write_plan(plan)
+                assistant = workspace.append_chat_message(
+                    "assistant",
+                    self._format_code_result(code_result, user_message=message),
+                    metadata={
+                        "intent": "integrate",
+                        "integration": integration,
+                        "code_result": code_result_data,
+                        "needs_watch": False,
+                        "executed": 0,
+                    },
+                )
+                workspace.append_log("Chat assistant generated an integration plan.", actor="agent")
+                return {
+                    "ok": code_result.ok,
+                    "mode": "integration",
+                    "reply": assistant.content,
+                    "actions": [],
+                    "memory": [],
+                    "plan": plan.model_dump(mode="json"),
+                    "executed": 0,
+                    "feedback": workspace.read_feedback(),
+                    "code_result": code_result_data,
+                    "skills": [skill.as_dict() for skill in self._skill_router().list_skills()],
+                    "integration": integration,
+                }
+
+            workspace.append_log(
+                f"Chat code skill ran for {code_result.rounds} round(s).",
+                actor="agent",
+            )
+            assistant = workspace.append_chat_message(
+                "assistant",
+                self._format_code_result(code_result, user_message=message),
+                metadata={
+                    "intent": "code_edit",
+                    "code_result": code_result_data,
+                },
+            )
+            return {
+                "ok": code_result.ok,
+                "mode": "code",
+                "reply": assistant.content,
+                "actions": [],
+                "memory": [],
+                "plan": None,
+                "executed": 0,
+                "feedback": workspace.read_feedback(),
+                "code_result": code_result_data,
+                "skills": [skill.as_dict() for skill in self._skill_router().list_skills()],
+            }
 
         if self._looks_like_integration_request(message):
             response = self._respond_with_integration(message)
@@ -79,6 +152,7 @@ class ChatRuntime:
                 "executed": executed,
                 "feedback": workspace.read_feedback(),
                 "integration": response.get("integration", {}),
+                "skills": [skill.as_dict() for skill in self._skill_router().list_skills()],
             }
 
         capabilities = workspace.read_capabilities()
@@ -169,7 +243,29 @@ class ChatRuntime:
             "plan": plan.model_dump(mode="json"),
             "executed": executed,
             "feedback": feedback if auto_step else workspace.read_feedback(),
+            "code_result": None,
+            "skills": [skill.as_dict() for skill in self._skill_router().list_skills()],
         }
+
+    def _maybe_handle_code_task(self, message: str):
+        match = self._skill_router().match(message)
+        if match is None:
+            return None
+        try:
+            return self._skill_router().run(message)
+        except Exception as exc:
+            runtime = self._code_runtime()
+            lesson = runtime.lessons.append(f"Code skill failed: {exc}")
+            return CodeTaskResult(
+                summary=f"Code skill failed: {exc}",
+                changed_files=[],
+                tests_run=[],
+                test_output=str(exc),
+                lessons_written=[lesson] if lesson else [],
+                rounds=0,
+                ok=False,
+                intent_kind=match.intent.kind,
+            )
 
     def _respond_with_integration(self, message: str) -> dict[str, Any]:
         source = self._extract_integration_source(message)
@@ -183,6 +279,43 @@ class ChatRuntime:
                 "steps": [],
                 "integration": {},
             }
+        use_llm = self._integration_request_wants_llm(message) or self._mode() == "llm"
+        if use_llm:
+            coding_result = DriverCodingAgent(
+                source,
+                base_dir=self.base_dir,
+                model=self.model,
+            ).generate()
+            result = coding_result.integration
+            profile = result.source
+            steps = [
+                f"Source detected: {profile.source_kind}",
+                f"Transport detected: {profile.transport}",
+                f"Robot kind detected: {profile.robot_kind}",
+                f"Generated scaffold at: {coding_result.output_path}",
+                f"LLM driver coding used: {coding_result.llm_used}",
+            ]
+            reply = (
+                f"I analyzed `{source}` and generated a Physical Agent driver draft at "
+                f"`{coding_result.output_path}`. "
+                f"LLM coding {'updated the driver' if coding_result.llm_used else 'fell back to the safe scaffold'}; "
+                f"validation status is `{coding_result.validation.get('ok')}`."
+            )
+            return {
+                "reply": reply,
+                "steps": steps,
+                "integration": {
+                    "source": profile.model_dump(mode="json"),
+                    "output_path": str(coding_result.output_path),
+                    "generated_files": coding_result.generated_files,
+                    "llm_used": coding_result.llm_used,
+                    "llm_error": coding_result.llm_error,
+                    "summary": coding_result.summary,
+                    "validation": coding_result.validation,
+                    "next_steps": coding_result.next_steps,
+                },
+            }
+
         assistant = HardwareIntegrationAssistant(source, base_dir=self.base_dir)
         result = assistant.generate()
         profile = result.source
@@ -408,6 +541,29 @@ class ChatRuntime:
             )
         )
 
+    def _integration_request_wants_llm(self, message: str) -> bool:
+        text = message.lower()
+        return any(
+            phrase in text
+            for phrase in (
+                "--llm",
+                "llm",
+                "write the driver",
+                "implement the driver",
+                "real sdk",
+                "complete driver",
+                "自动实现",
+                "真实sdk",
+                "真实 sdk",
+                "实现driver",
+                "实现 driver",
+                "写完整",
+                "生成完整",
+                "接入sdk",
+                "接入 sdk",
+            )
+        )
+
     def _extract_integration_source(self, message: str) -> str | None:
         url_match = re.search(r"(https?://[^\s]+github\.com/[^\s]+|git@github\.com:[^\s]+)", message, re.IGNORECASE)
         if url_match:
@@ -437,6 +593,88 @@ class ChatRuntime:
         if self.workspace is None:
             raise RuntimeError("ChatRuntime has not been set up.")
         return self.workspace
+
+    def _code_runtime(self) -> CodeSkillRuntime:
+        if self.code_runtime is None:
+            config = self._config()
+            self.code_runtime = CodeSkillRuntime(
+                self.base_dir,
+                model=self.model or (config.agent.model if config.agent.model != "fake/local" else None),
+                env_file=self.base_dir / ".env",
+            )
+        return self.code_runtime
+
+    def _skill_router(self) -> SkillRouter:
+        if self.skill_router is None:
+            config = self._config()
+            self.skill_router = SkillRouter(
+                self.base_dir,
+                model=self.model or (config.agent.model if config.agent.model != "fake/local" else None),
+                env_file=self.base_dir / ".env",
+                code_runtime=self._code_runtime(),
+            )
+        return self.skill_router
+
+    def _format_code_result(self, result: Any, *, user_message: str = "") -> str:
+        zh = _looks_like_chinese(user_message)
+        changed = ", ".join(result.changed_files) or "none"
+        tests = ", ".join(result.tests_run) or "none"
+        artifacts = ", ".join(getattr(result, "run_artifacts", []) or []) or "none"
+        summary = result.summary or "Updated the repository."
+        if getattr(result, "intent_kind", "") == "sdk_integration":
+            status = "finished" if result.ok else "could not finish"
+            integration = getattr(result, "integration", {}) or {}
+            output_path = integration.get("output_path")
+            if zh:
+                head = "我把这条请求识别成硬件接入任务，已经完成。" if result.ok else "我把这条请求识别成硬件接入任务，但还没有完成。"
+                lines = [head]
+            else:
+                lines = [f"I treated that as a hardware integration task and {status}: {summary}"]
+            if output_path:
+                lines.append(f"生成位置: {output_path}" if zh else f"Generated scaffold: {output_path}")
+            if changed != "none":
+                lines.append(f"改动文件: {changed}." if zh else f"Files touched: {changed}.")
+            if tests != "none":
+                lines.append(f"验证: {tests}." if zh else f"Validation: {tests}.")
+            if not output_path and changed == "none" and tests == "none":
+                lines.append(summary)
+            return "\n".join(lines)
+        if getattr(result, "intent_kind", "") == "code_run":
+            status = "succeeded" if result.ok else "failed"
+            if zh:
+                lines = [
+                    "可以。我把这条请求识别成代码执行任务，已经运行了，结果成功。"
+                    if result.ok
+                    else "可以。我把这条请求识别成代码执行任务并尝试运行了，但这次失败了。"
+                ]
+            else:
+                lines = [f"Yes. I treated that as a code execution task, ran it, and it {status}."]
+            if artifacts != "none":
+                lines.append(f"产物: {artifacts}." if zh else f"Artifact: {artifacts}.")
+            elif tests != "none":
+                lines.append(f"命令: {tests}." if zh else f"Command: {tests}.")
+            if not result.ok and summary:
+                lines.append(summary)
+            return "\n".join(lines)
+        status = "succeeded" if result.ok else "needs another round"
+        if zh:
+            lines = [
+                "可以。我把这条请求识别成代码任务，已经处理完成。"
+                if result.ok
+                else "可以。我把这条请求识别成代码任务，但还需要再处理一轮。"
+            ]
+        else:
+            lines = [f"Yes. I treated that as a code task and it {status}."]
+        if summary:
+            lines.append(summary)
+        if changed != "none":
+            lines.append(f"改动文件: {changed}." if zh else f"Changed files: {changed}.")
+        if tests != "none":
+            lines.append(f"检查: {tests}." if zh else f"Checks run: {tests}.")
+        if not result.ok and result.test_output.strip():
+            label = "关键输出" if zh else "Most relevant output"
+            lines.append(f"{label}: {_summarize_text(result.test_output)}")
+        return "\n".join(lines)
 
     def _config(self) -> PhysicalAgentConfig:
         if self.config is None:
@@ -482,6 +720,29 @@ def _normalize_chat_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "actions": [item for item in actions if isinstance(item, dict)],
         "memory": [str(item) for item in memory],
     }
+
+
+def _summarize_text(text: str, *, limit: int = 220) -> str:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return "No output."
+    priority = ("traceback", "error", "failed", "exception", "__exitcode__")
+    for line in reversed(lines):
+        lowered = line.lower()
+        if any(term in lowered for term in priority):
+            return _truncate(line, limit)
+    return _truncate(lines[-1], limit)
+
+
+def _truncate(text: str, limit: int) -> str:
+    clean = re.sub(r"\s+", " ", text).strip()
+    if len(clean) <= limit:
+        return clean
+    return clean[: max(0, limit - 1)].rstrip() + "..."
+
+
+def _looks_like_chinese(text: str) -> bool:
+    return bool(re.search(r"[\u4e00-\u9fff]", text))
 
 
 def _max_action_number(action_ids: set[str]) -> int:

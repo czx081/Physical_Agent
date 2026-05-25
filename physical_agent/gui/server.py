@@ -11,6 +11,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from physical_agent.agent.chat_runtime import ChatRuntime
+from physical_agent.agent.driver_coder import DriverCodingAgent
 from physical_agent.agent.onboarding import HardwareIntegrationAssistant
 from physical_agent.agent.runtime import AgentRuntime
 from physical_agent.config import DEFAULT_CONFIG_NAME, load_config, write_default_config
@@ -48,6 +49,7 @@ class GuiController:
 
         actions = workspace.read_actions()
         feedback = workspace.read_feedback()
+        code_result = _latest_code_result(workspace.read_chat())
         return {
             "ready": True,
             "watch_started": self._watch_started,
@@ -57,6 +59,7 @@ class GuiController:
             "task": workspace.read_task(),
             "capabilities": workspace.read_capabilities(),
             "world": workspace.read_world(),
+            "code_result": code_result,
             "actions": {
                 "pending": _dump_actions(actions["pending"]),
                 "completed": _dump_actions(actions["completed"]),
@@ -121,12 +124,16 @@ class GuiController:
                 assert self.watch_runtime is not None
                 executed = asyncio.run(self.watch_runtime.step(setup=False))
                 result["executed"] = executed
+            state = self.state()
+            if result.get("code_result") is not None:
+                state = {**state, "code_result": result["code_result"]}
             return {
                 "ok": True,
                 "message": result["reply"],
                 "result": _json_safe(result),
+                "code_result": _json_safe(result.get("code_result")),
                 "executed": executed,
-                "state": self.state(),
+                "state": state,
             }
 
     def integrate_hardware(
@@ -135,12 +142,33 @@ class GuiController:
         *,
         output: str | None = None,
         name: str | None = None,
+        llm: bool = False,
+        model: str | None = None,
     ) -> dict[str, Any]:
         with self.lock:
             if not self.config_path.exists():
                 write_default_config(self.config_path)
             config = load_config(self.config_path)
             Workspace(config.workspace_path(self.config_path.parent)).initialize()
+            if llm:
+                result = DriverCodingAgent(
+                    source,
+                    output_dir=output or None,
+                    name=name or None,
+                    base_dir=self.config_path.parent,
+                    model=model or None,
+                ).generate()
+                message = (
+                    f"Generated LLM driver draft at {result.output_path}."
+                    if result.llm_used
+                    else f"Generated safe scaffold at {result.output_path}; LLM coding did not validate."
+                )
+                return {
+                    "ok": True,
+                    "message": message,
+                    "result": _json_safe(result.model_dump(mode="json")),
+                    "state": self.state(),
+                }
             assistant = HardwareIntegrationAssistant(
                 source,
                 output_dir=output or None,
@@ -265,8 +293,16 @@ def make_server(
                         return
                     output = str(payload.get("output", "")).strip() or None
                     name = str(payload.get("name", "")).strip() or None
+                    llm = bool(payload.get("llm", False))
+                    model = str(payload.get("model", "")).strip() or None
                     self._send_json(
-                        controller.integrate_hardware(source, output=output, name=name)
+                        controller.integrate_hardware(
+                            source,
+                            output=output,
+                            name=name,
+                            llm=llm,
+                            model=model,
+                        )
                     )
                     return
                 if route == "/api/demo":
@@ -345,6 +381,19 @@ def _json_safe(value: Any) -> Any:
     if isinstance(value, Path):
         return str(value)
     return value
+
+
+def _latest_code_result(chat: dict[str, Any]) -> dict[str, Any] | None:
+    messages = chat.get("messages", [])
+    for message in reversed(messages):
+        metadata = None
+        if hasattr(message, "metadata"):
+            metadata = getattr(message, "metadata")
+        elif isinstance(message, dict):
+            metadata = message.get("metadata")
+        if isinstance(metadata, dict) and metadata.get("code_result") is not None:
+            return _json_safe(metadata["code_result"])
+    return None
 
 
 INDEX_HTML = r"""<!doctype html>
@@ -549,6 +598,10 @@ INDEX_HTML = r"""<!doctype html>
           <button id="send-chat" class="primary" data-i18n="send">Send</button>
           <label><input id="chat-auto-step" type="checkbox"> <span data-i18n="autoStep">Run one watch step</span></label>
         </div>
+        <details id="code-result-panel" style="display:none;">
+          <summary data-i18n="codeSkillTitle">Code skill result</summary>
+          <pre id="code-result-json">{}</pre>
+        </details>
       </section>
 
       <section class="stack">
@@ -569,9 +622,16 @@ INDEX_HTML = r"""<!doctype html>
         <input id="integrate-source" type="text" data-i18n-placeholder="integrateSourcePlaceholder" placeholder="./vendor_sdk or https://github.com/org/repo">
         <div class="grid-2">
           <input id="integrate-name" type="text" data-i18n-placeholder="integrateNamePlaceholder" placeholder="optional_driver_name">
+          <input id="integrate-model" type="text" data-i18n-placeholder="integrateModelPlaceholder" placeholder="optional model override">
+        </div>
+        <div class="row">
+          <select id="integrate-mode" aria-label="Integration mode">
+            <option value="scaffold" data-i18n="integrateModeScaffold">Scaffold</option>
+            <option value="llm" data-i18n="integrateModeLlm">LLM draft</option>
+          </select>
           <button id="integrate" data-i18n="integrateButton">Generate driver</button>
         </div>
-        <p data-i18n="integrateHint">Generates a watch-side driver scaffold; it does not execute hardware.</p>
+        <p data-i18n="integrateHint">Scaffold mode writes a safe watch-side driver template. LLM draft mode reads SDK context, proposes driver.py, validates it in mock mode, and never executes hardware from the browser.</p>
       </section>
     </div>
 
@@ -651,11 +711,15 @@ INDEX_HTML = r"""<!doctype html>
         runningDemo: "Running demo",
         refreshing: "Refreshing",
         sendingChat: "Sending",
+        codeSkillTitle: "Code skill result",
         integrateTitle: "Hardware integration",
         integrateSourcePlaceholder: "./vendor_sdk or https://github.com/org/repo",
         integrateNamePlaceholder: "optional_driver_name",
+        integrateModelPlaceholder: "optional model override",
+        integrateModeScaffold: "Scaffold",
+        integrateModeLlm: "LLM draft",
         integrateButton: "Generate driver",
-        integrateHint: "Generates a watch-side driver scaffold; it does not execute hardware.",
+        integrateHint: "Scaffold mode writes a safe watch-side driver template. LLM draft mode reads SDK context, proposes driver.py, validates it in mock mode, and never executes hardware from the browser.",
         integrating: "Generating driver",
         done: "Done"
       },
@@ -705,11 +769,15 @@ INDEX_HTML = r"""<!doctype html>
         runningDemo: "正在运行演示",
         refreshing: "正在刷新",
         sendingChat: "正在发送",
+        codeSkillTitle: "代码技能结果",
         integrateTitle: "硬件接入",
         integrateSourcePlaceholder: "./vendor_sdk 或 https://github.com/org/repo",
         integrateNamePlaceholder: "可选驱动名",
+        integrateModelPlaceholder: "可选模型覆盖",
+        integrateModeScaffold: "脚手架",
+        integrateModeLlm: "LLM 草稿",
         integrateButton: "生成驱动",
-        integrateHint: "只生成 watch 侧 driver 脚手架，不会执行硬件动作。",
+        integrateHint: "脚手架模式生成安全的 watch 侧 driver 模板。LLM 草稿模式会读取 SDK 上下文、编写 driver.py、用 mock 模式验证，并且不会从浏览器执行硬件动作。",
         integrating: "正在生成驱动",
         done: "完成"
       }
@@ -735,8 +803,12 @@ INDEX_HTML = r"""<!doctype html>
       chatPlanner: document.querySelector("#chat-planner"),
       chatAutoStep: document.querySelector("#chat-auto-step"),
       sendChat: document.querySelector("#send-chat"),
+      codeResultPanel: document.querySelector("#code-result-panel"),
+      codeResultJson: document.querySelector("#code-result-json"),
       integrateSource: document.querySelector("#integrate-source"),
       integrateName: document.querySelector("#integrate-name"),
+      integrateModel: document.querySelector("#integrate-model"),
+      integrateMode: document.querySelector("#integrate-mode"),
       integrate: document.querySelector("#integrate")
     };
 
@@ -795,10 +867,22 @@ INDEX_HTML = r"""<!doctype html>
       els.status.textContent = ready ? (state.watch_started ? t("readyWatch") : t("readyStopped")) : t("setupNeeded");
 
       renderChat(state);
+      renderCodeResult(state);
       renderWorld(state);
       renderActions(state);
       renderFeedback(state);
       renderSystem(state);
+    }
+
+    function renderCodeResult(state) {
+      const codeResult = state.code_result || null;
+      if (!codeResult) {
+        els.codeResultPanel.style.display = "none";
+        els.codeResultJson.textContent = "{}";
+        return;
+      }
+      els.codeResultPanel.style.display = "block";
+      els.codeResultJson.textContent = JSON.stringify(codeResult, null, 2);
     }
 
     function renderChat(state) {
@@ -903,7 +987,9 @@ INDEX_HTML = r"""<!doctype html>
     })));
     els.integrate.addEventListener("click", () => run("integrating", () => post("/api/integrate", {
       source: els.integrateSource.value,
-      name: els.integrateName.value
+      name: els.integrateName.value,
+      model: els.integrateModel.value,
+      llm: els.integrateMode.value === "llm"
     })));
 
     setLanguage(lang);

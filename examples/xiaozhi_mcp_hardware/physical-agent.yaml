@@ -18,12 +18,19 @@ robots:
   xiaozhi_1:
     driver: .
     config:
-      mode: mock
+      mode: ws
+      wait_for_responses: false
       device_name: xiaozhi-demo-device
       tool_prefix: self.device
+      ws_url_env: XIAOZHI_MCP_URL
+      host_env: XIAOZHI_MCP_HOST
+      port_env: XIAOZHI_MCP_PORT
+      path_env: XIAOZHI_MCP_PATH
       endpoint_env: XIAOZHI_MCP_ENDPOINT
       token_env: XIAOZHI_MCP_TOKEN
       tools:
-        observe: self.device.observe
-        say: self.audio.speaker.speak
-        set_light: self.light.set_rgb
+        observe: self.get_device_status
+        set_volume: self.audio_speaker.set_volume
+        otto_action: self.otto.action
+        home: self.otto.action
+        stop: self.otto.stop

@@ -512,6 +512,8 @@ Use `physical-agent llm-test --model <model-name>` to verify a candidate model. 
 
 If you want chat to behave like a code-first assistant inside the current repository, ask it to edit files or fix tests directly. The chat runtime will route those requests into the code skill, apply changes under the repository root, run tests, and report the changed files plus test output.
 
+By default, chat keeps code skill output conversational and stores the structured result in chat metadata and the GUI code result panel. For debugging, add `--show-code-result` to print the full structured code result after the natural reply.
+
 Execute the proposed actions by running watch in another terminal:
 
 ```bash

@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 
 import pytest
+from typer.testing import CliRunner
 
 from physical_agent.agent.chat_runtime import ChatRuntime
 from physical_agent.agent.code_patch import CodePatchError, FileEdit, apply_file_edits
 from physical_agent.agent.code_router import CodeIntentRouter
 from physical_agent.agent.code_runtime import CodeSkillRuntime, _normalize_test_command, _tests_passed
 from physical_agent.agent.skills import SkillRouter
+from physical_agent.cli import app
 from physical_agent.protocol.schemas import CodeTaskIntent, CodeTaskResult
 from physical_agent.protocol.workspace import Workspace
 from physical_agent.quickstart import setup_project
@@ -207,9 +209,10 @@ def test_chat_runtime_formats_code_run_results(tmp_path):
     result = runtime.respond("帮我执行画圈的代码")
 
     assert result["mode"] == "code"
-    assert "Artifacts:" in result["reply"]
+    assert "代码执行任务" in result["reply"]
+    assert "产物:" in result["reply"]
     assert result["code_result"]["run_artifacts"]
-    assert "Command:" in result["reply"]
+    assert "Command:" not in result["reply"]
     assert "Test output:" not in result["reply"]
 
 
@@ -268,6 +271,8 @@ def test_chat_runtime_routes_code_task_and_persists_result(tmp_path, monkeypatch
 
     assert result["mode"] == "code"
     assert result["code_result"]["summary"] == "Patched via chat code skill."
+    assert "代码任务" in result["reply"]
+    assert "改动文件: README.md." in result["reply"]
     workspace = Workspace(tmp_path / "workspace")
     messages = workspace.read_chat()["messages"]
     assert messages[-1].metadata["code_result"]["summary"] == "Patched via chat code skill."
@@ -309,3 +314,58 @@ def test_chat_runtime_exposes_skills_in_response(tmp_path):
 
     assert result["skills"]
     assert any(skill["name"] == "code" for skill in result["skills"])
+
+
+def test_cli_chat_hides_structured_code_result_by_default(tmp_path, monkeypatch):
+    config_path = tmp_path / "physical-agent.yaml"
+    setup_project(config_path, publish=True)
+
+    original = ChatRuntime._code_runtime
+    monkeypatch.setattr(ChatRuntime, "_code_runtime", lambda self: FakeCodeRuntime())
+    try:
+        result = CliRunner().invoke(
+            app,
+            [
+                "chat",
+                "--config",
+                str(config_path),
+                "--planner",
+                "rule_based",
+                "--message",
+                "please modify files and write tests",
+            ],
+        )
+    finally:
+        monkeypatch.setattr(ChatRuntime, "_code_runtime", original)
+
+    assert result.exit_code == 0
+    assert "Yes. I treated that as a code task" in result.output
+    assert "Code skill result:" not in result.output
+
+
+def test_cli_chat_can_show_structured_code_result(tmp_path, monkeypatch):
+    config_path = tmp_path / "physical-agent.yaml"
+    setup_project(config_path, publish=True)
+
+    original = ChatRuntime._code_runtime
+    monkeypatch.setattr(ChatRuntime, "_code_runtime", lambda self: FakeCodeRuntime())
+    try:
+        result = CliRunner().invoke(
+            app,
+            [
+                "chat",
+                "--config",
+                str(config_path),
+                "--planner",
+                "rule_based",
+                "--show-code-result",
+                "--message",
+                "please modify files and write tests",
+            ],
+        )
+    finally:
+        monkeypatch.setattr(ChatRuntime, "_code_runtime", original)
+
+    assert result.exit_code == 0
+    assert "Code skill result:" in result.output
+    assert "summary: Patched via chat code skill." in result.output

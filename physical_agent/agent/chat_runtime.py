@@ -68,7 +68,7 @@ class ChatRuntime:
                 workspace.write_plan(plan)
                 assistant = workspace.append_chat_message(
                     "assistant",
-                    code_result.summary,
+                    self._format_code_result(code_result, user_message=message),
                     metadata={
                         "intent": "integrate",
                         "integration": integration,
@@ -86,11 +86,11 @@ class ChatRuntime:
                     "memory": [],
                     "plan": plan.model_dump(mode="json"),
                     "executed": 0,
-                "feedback": workspace.read_feedback(),
-                "code_result": code_result_data,
-                "skills": [skill.as_dict() for skill in self._skill_router().list_skills()],
-                "integration": integration,
-            }
+                    "feedback": workspace.read_feedback(),
+                    "code_result": code_result_data,
+                    "skills": [skill.as_dict() for skill in self._skill_router().list_skills()],
+                    "integration": integration,
+                }
 
             workspace.append_log(
                 f"Chat code skill ran for {code_result.rounds} round(s).",
@@ -98,7 +98,7 @@ class ChatRuntime:
             )
             assistant = workspace.append_chat_message(
                 "assistant",
-                self._format_code_result(code_result),
+                self._format_code_result(code_result, user_message=message),
                 metadata={
                     "intent": "code_edit",
                     "code_result": code_result_data,
@@ -615,27 +615,66 @@ class ChatRuntime:
             )
         return self.skill_router
 
-    def _format_code_result(self, result: Any) -> str:
+    def _format_code_result(self, result: Any, *, user_message: str = "") -> str:
+        zh = _looks_like_chinese(user_message)
         changed = ", ".join(result.changed_files) or "none"
         tests = ", ".join(result.tests_run) or "none"
         artifacts = ", ".join(getattr(result, "run_artifacts", []) or []) or "none"
         summary = result.summary or "Updated the repository."
+        if getattr(result, "intent_kind", "") == "sdk_integration":
+            status = "finished" if result.ok else "could not finish"
+            integration = getattr(result, "integration", {}) or {}
+            output_path = integration.get("output_path")
+            if zh:
+                head = "我把这条请求识别成硬件接入任务，已经完成。" if result.ok else "我把这条请求识别成硬件接入任务，但还没有完成。"
+                lines = [head]
+            else:
+                lines = [f"I treated that as a hardware integration task and {status}: {summary}"]
+            if output_path:
+                lines.append(f"生成位置: {output_path}" if zh else f"Generated scaffold: {output_path}")
+            if changed != "none":
+                lines.append(f"改动文件: {changed}." if zh else f"Files touched: {changed}.")
+            if tests != "none":
+                lines.append(f"验证: {tests}." if zh else f"Validation: {tests}.")
+            if not output_path and changed == "none" and tests == "none":
+                lines.append(summary)
+            return "\n".join(lines)
         if getattr(result, "intent_kind", "") == "code_run":
             status = "succeeded" if result.ok else "failed"
-            return (
-                f"{summary}\n\n"
-                f"Execution {status} after {result.rounds} pass(es).\n"
-                f"Command: {tests}\n"
-                f"Artifacts: {artifacts}"
-            )
+            if zh:
+                lines = [
+                    "可以。我把这条请求识别成代码执行任务，已经运行了，结果成功。"
+                    if result.ok
+                    else "可以。我把这条请求识别成代码执行任务并尝试运行了，但这次失败了。"
+                ]
+            else:
+                lines = [f"Yes. I treated that as a code execution task, ran it, and it {status}."]
+            if artifacts != "none":
+                lines.append(f"产物: {artifacts}." if zh else f"Artifact: {artifacts}.")
+            elif tests != "none":
+                lines.append(f"命令: {tests}." if zh else f"Command: {tests}.")
+            if not result.ok and summary:
+                lines.append(summary)
+            return "\n".join(lines)
         status = "succeeded" if result.ok else "needs another round"
-        return (
-            f"{summary}\n\n"
-            f"Code skill {status} after {result.rounds} round(s).\n"
-            f"Changed files: {changed}\n"
-            f"Tests run: {tests}\n"
-            f"Test output:\n{result.test_output.strip() or 'No test output.'}"
-        )
+        if zh:
+            lines = [
+                "可以。我把这条请求识别成代码任务，已经处理完成。"
+                if result.ok
+                else "可以。我把这条请求识别成代码任务，但还需要再处理一轮。"
+            ]
+        else:
+            lines = [f"Yes. I treated that as a code task and it {status}."]
+        if summary:
+            lines.append(summary)
+        if changed != "none":
+            lines.append(f"改动文件: {changed}." if zh else f"Changed files: {changed}.")
+        if tests != "none":
+            lines.append(f"检查: {tests}." if zh else f"Checks run: {tests}.")
+        if not result.ok and result.test_output.strip():
+            label = "关键输出" if zh else "Most relevant output"
+            lines.append(f"{label}: {_summarize_text(result.test_output)}")
+        return "\n".join(lines)
 
     def _config(self) -> PhysicalAgentConfig:
         if self.config is None:
@@ -681,6 +720,29 @@ def _normalize_chat_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "actions": [item for item in actions if isinstance(item, dict)],
         "memory": [str(item) for item in memory],
     }
+
+
+def _summarize_text(text: str, *, limit: int = 220) -> str:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return "No output."
+    priority = ("traceback", "error", "failed", "exception", "__exitcode__")
+    for line in reversed(lines):
+        lowered = line.lower()
+        if any(term in lowered for term in priority):
+            return _truncate(line, limit)
+    return _truncate(lines[-1], limit)
+
+
+def _truncate(text: str, limit: int) -> str:
+    clean = re.sub(r"\s+", " ", text).strip()
+    if len(clean) <= limit:
+        return clean
+    return clean[: max(0, limit - 1)].rstrip() + "..."
+
+
+def _looks_like_chinese(text: str) -> bool:
+    return bool(re.search(r"[\u4e00-\u9fff]", text))
 
 
 def _max_action_number(action_ids: set[str]) -> int:

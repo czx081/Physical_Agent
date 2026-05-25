@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 import yaml
@@ -143,21 +143,18 @@ def chat(
         "--auto-step",
         help="Run one watch step after proposed actions are written.",
     ),
+    show_code_result: bool = typer.Option(
+        False,
+        "--show-code-result",
+        help="Print the structured code skill result after the natural chat reply.",
+    ),
 ) -> None:
     runtime = ChatRuntime(config, planner_name=planner, model=model)
     if message is not None:
         result = runtime.respond(message, auto_step=auto_step)
         typer.echo(result["reply"])
-        if result.get("code_result"):
-            typer.echo("Code skill result:")
-            code_result = dict(result["code_result"])
-            if code_result.get("intent_kind") == "code_run":
-                typer.echo(f"Summary: {code_result.get('summary', '')}")
-                typer.echo(f"Status: {'succeeded' if code_result.get('ok') else 'failed'}")
-                typer.echo(f"Command: {', '.join(code_result.get('tests_run') or []) or 'none'}")
-                typer.echo(f"Artifacts: {', '.join(code_result.get('run_artifacts') or []) or 'none'}")
-            else:
-                typer.echo(yaml.safe_dump(code_result, sort_keys=False).strip())
+        if show_code_result and result.get("code_result"):
+            _echo_code_result(dict(result["code_result"]))
         if result["actions"]:
             typer.echo("Proposed actions:")
             for action in result["actions"]:
@@ -177,22 +174,27 @@ def chat(
             typer.echo(f"agent> Chat failed: {exc}")
             continue
         typer.echo(f"agent> {result['reply']}")
-        if result.get("code_result"):
-            typer.echo("agent> Code skill result:")
-            code_result = dict(result["code_result"])
-            if code_result.get("intent_kind") == "code_run":
-                typer.echo(f"agent> Summary: {code_result.get('summary', '')}")
-                typer.echo(f"agent> Status: {'succeeded' if code_result.get('ok') else 'failed'}")
-                typer.echo(f"agent> Command: {', '.join(code_result.get('tests_run') or []) or 'none'}")
-                typer.echo(f"agent> Artifacts: {', '.join(code_result.get('run_artifacts') or []) or 'none'}")
-            else:
-                typer.echo(yaml.safe_dump(code_result, sort_keys=False).strip())
+        if show_code_result and result.get("code_result"):
+            _echo_code_result(dict(result["code_result"]), prefix="agent> ")
         if result["actions"]:
             typer.echo("agent> Proposed actions:")
             for action in result["actions"]:
                 typer.echo(f"  - {action['id']}: {action['robot']}.{action['capability']}")
         if result["executed"]:
             typer.echo(f"agent> Watch step executed {result['executed']} action(s).")
+
+
+def _echo_code_result(code_result: dict[str, Any], *, prefix: str = "") -> None:
+    typer.echo(f"{prefix}Code skill result:")
+    if code_result.get("intent_kind") == "code_run":
+        typer.echo(f"{prefix}Summary: {code_result.get('summary', '')}")
+        typer.echo(f"{prefix}Status: {'succeeded' if code_result.get('ok') else 'failed'}")
+        typer.echo(f"{prefix}Command: {', '.join(code_result.get('tests_run') or []) or 'none'}")
+        typer.echo(f"{prefix}Artifacts: {', '.join(code_result.get('run_artifacts') or []) or 'none'}")
+    else:
+        text = yaml.safe_dump(code_result, sort_keys=False).strip()
+        for line in text.splitlines():
+            typer.echo(f"{prefix}{line}")
 
 
 @app.command("llm-test")

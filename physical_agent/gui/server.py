@@ -512,7 +512,7 @@ INDEX_HTML = r"""<!doctype html>
     .chat-log {
       display: grid;
       gap: 8px;
-      min-height: 160px;
+      min-height: 220px;
       max-height: 360px;
       overflow: auto;
       padding: 8px;
@@ -524,13 +524,26 @@ INDEX_HTML = r"""<!doctype html>
       max-width: 92%;
       border: 1px solid var(--line);
       border-radius: 8px;
-      padding: 9px 10px;
+      padding: 8px 10px 9px;
       background: #fff;
       white-space: pre-wrap;
       line-height: 1.45;
+      overflow-wrap: anywhere;
     }
     .message.user { justify-self: end; border-color: #bfdbfe; background: #eff6ff; }
     .message.assistant { justify-self: start; border-color: #bbf7d0; background: #f0fdf4; }
+    .message.system { justify-self: center; max-width: 100%; color: var(--muted); }
+    .message-body { color: var(--text); }
+    .chat-actions {
+      justify-content: space-between;
+      align-items: center;
+    }
+    .execution-mode {
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fbfcfe;
+    }
     .list { display: grid; gap: 8px; }
     .item {
       border: 1px solid var(--line);
@@ -542,6 +555,116 @@ INDEX_HTML = r"""<!doctype html>
     }
     .item strong { display: block; margin-bottom: 3px; }
     .item span { color: var(--muted); line-height: 1.45; overflow-wrap: anywhere; }
+    .action-card, .feedback-entry {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px;
+      background: #fff;
+      display: grid;
+      gap: 7px;
+      min-width: 0;
+    }
+    .action-card.pending { border-left: 4px solid var(--blue); }
+    .action-card.completed, .feedback-entry.completed { border-left: 4px solid var(--green); }
+    .action-card.cancelled, .action-card.failed, .feedback-entry.cancelled, .feedback-entry.failed { border-left: 4px solid var(--red); }
+    .action-head, .feedback-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    .action-title, .feedback-title {
+      font-weight: 750;
+      overflow-wrap: anywhere;
+    }
+    .status-pill {
+      flex: 0 0 auto;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 2px 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .status-pill.pending { border-color: #bfdbfe; color: var(--blue); background: #eff6ff; }
+    .status-pill.completed { border-color: #86efac; color: var(--green); background: #f0fdf4; }
+    .status-pill.cancelled, .status-pill.failed { border-color: #fca5a5; color: var(--red); background: #fef2f2; }
+    .kv-grid {
+      display: grid;
+      gap: 4px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .kv-grid div { overflow-wrap: anywhere; }
+    .kv-grid strong {
+      color: var(--text);
+      font-weight: 650;
+    }
+    .wizard-steps {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .step-card {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 9px 10px;
+      background: #fbfcfe;
+      color: var(--text);
+      cursor: pointer;
+      font: inherit;
+      min-height: auto;
+      min-width: 0;
+      text-align: left;
+    }
+    .step-card:hover { border-color: #93c5fd; background: #eff6ff; }
+    .step-card.active {
+      border-color: var(--blue);
+      box-shadow: inset 0 0 0 1px var(--blue);
+      background: #eff6ff;
+    }
+    .step-card.done { border-color: #86efac; background: #f0fdf4; }
+    .step-card strong {
+      display: block;
+      margin-bottom: 3px;
+      font-size: 13px;
+    }
+    .step-card span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .field-label {
+      display: grid;
+      gap: 5px;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 650;
+    }
+    .integration-result {
+      border: 1px solid #bfdbfe;
+      border-left: 4px solid var(--blue);
+      border-radius: 6px;
+      padding: 10px;
+      background: #eff6ff;
+      display: grid;
+      gap: 8px;
+    }
+    .integration-result h3 {
+      margin: 0;
+      font-size: 14px;
+    }
+    .integration-result ul {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .integration-result code {
+      color: var(--text);
+      overflow-wrap: anywhere;
+    }
     details {
       border: 1px solid var(--line);
       border-radius: 6px;
@@ -563,6 +686,7 @@ INDEX_HTML = r"""<!doctype html>
       header { align-items: flex-start; flex-direction: column; }
       .top-actions { justify-content: flex-start; }
       .grid-2 { grid-template-columns: 1fr; }
+      .wizard-steps { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -593,10 +717,10 @@ INDEX_HTML = r"""<!doctype html>
           </select>
         </div>
         <div id="chat-log" class="chat-log"></div>
-        <textarea id="chat-input" data-i18n-placeholder="chatPlaceholder" placeholder="Ask what the agent sees, or request a safe action."></textarea>
-        <div class="row">
+        <textarea id="chat-input" rows="3" data-i18n-placeholder="chatPlaceholder" placeholder="Ask what the agent sees, or request a safe action."></textarea>
+        <div class="row chat-actions">
           <button id="send-chat" class="primary" data-i18n="send">Send</button>
-          <label><input id="chat-auto-step" type="checkbox"> <span data-i18n="autoStep">Run one watch step</span></label>
+          <label class="execution-mode"><input id="chat-auto-step" type="checkbox"> <span data-i18n="autoStep">Run one watch step after proposing</span></label>
         </div>
         <details id="code-result-panel" style="display:none;">
           <summary data-i18n="codeSkillTitle">Code skill result</summary>
@@ -619,18 +743,45 @@ INDEX_HTML = r"""<!doctype html>
 
       <section class="stack">
         <h2 data-i18n="integrateTitle">Hardware integration</h2>
-        <input id="integrate-source" type="text" data-i18n-placeholder="integrateSourcePlaceholder" placeholder="./vendor_sdk or https://github.com/org/repo">
+        <div class="wizard-steps">
+          <button id="integrate-step-source" class="step-card active" type="button" data-step="source">
+            <strong data-i18n="integrateStepSource">1. Source</strong>
+            <span data-i18n="integrateStepSourceHint">Local SDK, GitHub repo, or package name.</span>
+          </button>
+          <button id="integrate-step-mode" class="step-card" type="button" data-step="mode">
+            <strong data-i18n="integrateStepMode">2. Mode</strong>
+            <span data-i18n="integrateStepModeHint">Start with a scaffold; use LLM draft when SDK context is available.</span>
+          </button>
+          <button id="integrate-step-review" class="step-card" type="button" data-step="review">
+            <strong data-i18n="integrateStepReview">3. Review</strong>
+            <span data-i18n="integrateStepReviewHint">Inspect generated files before connecting real hardware.</span>
+          </button>
+        </div>
+        <label class="field-label">
+          <span data-i18n="integrateSourceLabel">Source</span>
+          <input id="integrate-source" type="text" data-i18n-placeholder="integrateSourcePlaceholder" placeholder="./vendor_sdk or https://github.com/org/repo">
+        </label>
         <div class="grid-2">
-          <input id="integrate-name" type="text" data-i18n-placeholder="integrateNamePlaceholder" placeholder="optional_driver_name">
-          <input id="integrate-model" type="text" data-i18n-placeholder="integrateModelPlaceholder" placeholder="optional model override">
+          <label class="field-label">
+            <span data-i18n="integrateNameLabel">Driver name</span>
+            <input id="integrate-name" type="text" data-i18n-placeholder="integrateNamePlaceholder" placeholder="optional_driver_name">
+          </label>
+          <label class="field-label">
+            <span data-i18n="integrateModelLabel">Model override</span>
+            <input id="integrate-model" type="text" data-i18n-placeholder="integrateModelPlaceholder" placeholder="optional model override">
+          </label>
         </div>
         <div class="row">
-          <select id="integrate-mode" aria-label="Integration mode">
-            <option value="scaffold" data-i18n="integrateModeScaffold">Scaffold</option>
-            <option value="llm" data-i18n="integrateModeLlm">LLM draft</option>
-          </select>
+          <label class="field-label">
+            <span data-i18n="integrateModeLabel">Generation mode</span>
+            <select id="integrate-mode" aria-label="Integration mode">
+              <option value="scaffold" data-i18n="integrateModeScaffold">Scaffold</option>
+              <option value="llm" data-i18n="integrateModeLlm">LLM draft</option>
+            </select>
+          </label>
           <button id="integrate" data-i18n="integrateButton">Generate driver</button>
         </div>
+        <div id="integrate-result" class="integration-result" style="display:none;"></div>
         <p data-i18n="integrateHint">Scaffold mode writes a safe watch-side driver template. LLM draft mode reads SDK context, proposes driver.py, validates it in mock mode, and never executes hardware from the browser.</p>
       </section>
     </div>
@@ -677,7 +828,7 @@ INDEX_HTML = r"""<!doctype html>
         ruleChat: "Rules",
         chatPlaceholder: "Ask what the agent sees, or request a safe action.",
         send: "Send",
-        autoStep: "Run one watch step",
+        autoStep: "Run one watch step after proposing",
         quickTitle: "Quick actions",
         setup: "Setup",
         reset: "Reset",
@@ -700,7 +851,14 @@ INDEX_HTML = r"""<!doctype html>
         startWatchHint: "Click Setup or Start watch.",
         pending: "Pending",
         completed: "Completed",
+        failed: "Failed",
         cancelled: "Cancelled",
+        params: "Params",
+        dependsOn: "Depends on",
+        reason: "Reason",
+        result: "Result",
+        artifacts: "Artifacts",
+        recentFeedback: "Recent feedback",
         none: "none",
         latest: "Latest",
         noFeedback: "No feedback yet.",
@@ -713,12 +871,28 @@ INDEX_HTML = r"""<!doctype html>
         sendingChat: "Sending",
         codeSkillTitle: "Code skill result",
         integrateTitle: "Hardware integration",
+        integrateStepSource: "1. Source",
+        integrateStepSourceHint: "Local SDK, GitHub repo, or package name.",
+        integrateStepMode: "2. Mode",
+        integrateStepModeHint: "Start with a scaffold; use LLM draft when SDK context is available.",
+        integrateStepReview: "3. Review",
+        integrateStepReviewHint: "Inspect generated files before connecting real hardware.",
+        integrateSourceLabel: "Source",
         integrateSourcePlaceholder: "./vendor_sdk or https://github.com/org/repo",
+        integrateNameLabel: "Driver name",
         integrateNamePlaceholder: "optional_driver_name",
+        integrateModelLabel: "Model override",
         integrateModelPlaceholder: "optional model override",
+        integrateModeLabel: "Generation mode",
         integrateModeScaffold: "Scaffold",
         integrateModeLlm: "LLM draft",
         integrateButton: "Generate driver",
+        integrateResultTitle: "Generated driver draft",
+        integrateOutput: "Output",
+        integrateFiles: "Files",
+        integrateNextSteps: "Next steps",
+        integrateNoFiles: "No files reported.",
+        integrateNoNextSteps: "Review driver.py, then add the driver path to physical-agent.yaml and test in mock mode first.",
         integrateHint: "Scaffold mode writes a safe watch-side driver template. LLM draft mode reads SDK context, proposes driver.py, validates it in mock mode, and never executes hardware from the browser.",
         integrating: "Generating driver",
         done: "Done"
@@ -735,7 +909,7 @@ INDEX_HTML = r"""<!doctype html>
         ruleChat: "规则",
         chatPlaceholder: "询问 agent 看到了什么，或请求一个安全动作。",
         send: "发送",
-        autoStep: "执行一次 watch step",
+        autoStep: "生成后执行一次 watch step",
         quickTitle: "常用操作",
         setup: "初始化",
         reset: "重置",
@@ -758,7 +932,14 @@ INDEX_HTML = r"""<!doctype html>
         startWatchHint: "点击初始化或启动 watch。",
         pending: "待执行",
         completed: "已完成",
+        failed: "失败",
         cancelled: "已取消",
+        params: "参数",
+        dependsOn: "依赖",
+        reason: "原因",
+        result: "结果",
+        artifacts: "产物",
+        recentFeedback: "最近反馈",
         none: "无",
         latest: "最新",
         noFeedback: "还没有反馈。",
@@ -771,12 +952,28 @@ INDEX_HTML = r"""<!doctype html>
         sendingChat: "正在发送",
         codeSkillTitle: "代码技能结果",
         integrateTitle: "硬件接入",
+        integrateStepSource: "1. 选择来源",
+        integrateStepSourceHint: "本地 SDK、GitHub 仓库或 Python 包名。",
+        integrateStepMode: "2. 选择模式",
+        integrateStepModeHint: "优先用脚手架；有 SDK 上下文时再用 LLM 草稿。",
+        integrateStepReview: "3. 检查结果",
+        integrateStepReviewHint: "连接真实硬件前，先检查生成文件。",
+        integrateSourceLabel: "来源",
         integrateSourcePlaceholder: "./vendor_sdk 或 https://github.com/org/repo",
+        integrateNameLabel: "驱动名",
         integrateNamePlaceholder: "可选驱动名",
+        integrateModelLabel: "模型覆盖",
         integrateModelPlaceholder: "可选模型覆盖",
+        integrateModeLabel: "生成模式",
         integrateModeScaffold: "脚手架",
         integrateModeLlm: "LLM 草稿",
         integrateButton: "生成驱动",
+        integrateResultTitle: "已生成驱动草稿",
+        integrateOutput: "生成目录",
+        integrateFiles: "文件",
+        integrateNextSteps: "下一步",
+        integrateNoFiles: "没有返回文件清单。",
+        integrateNoNextSteps: "先检查 driver.py，再把 driver 路径加入 physical-agent.yaml，并优先用 mock 模式测试。",
         integrateHint: "脚手架模式生成安全的 watch 侧 driver 模板。LLM 草稿模式会读取 SDK 上下文、编写 driver.py、用 mock 模式验证，并且不会从浏览器执行硬件动作。",
         integrating: "正在生成驱动",
         done: "完成"
@@ -805,16 +1002,21 @@ INDEX_HTML = r"""<!doctype html>
       sendChat: document.querySelector("#send-chat"),
       codeResultPanel: document.querySelector("#code-result-panel"),
       codeResultJson: document.querySelector("#code-result-json"),
+      integrateStepSource: document.querySelector("#integrate-step-source"),
+      integrateStepMode: document.querySelector("#integrate-step-mode"),
+      integrateStepReview: document.querySelector("#integrate-step-review"),
       integrateSource: document.querySelector("#integrate-source"),
       integrateName: document.querySelector("#integrate-name"),
       integrateModel: document.querySelector("#integrate-model"),
       integrateMode: document.querySelector("#integrate-mode"),
-      integrate: document.querySelector("#integrate")
+      integrate: document.querySelector("#integrate"),
+      integrateResult: document.querySelector("#integrate-result")
     };
 
     const savedLang = localStorage.getItem("physical-agent-lang");
     let lang = savedLang || ((navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en");
     let lastState = null;
+    let lastIntegrationResult = null;
 
     function t(key) { return (I18N[lang] || I18N.en)[key] || I18N.en[key] || key; }
 
@@ -822,16 +1024,24 @@ INDEX_HTML = r"""<!doctype html>
       lang = next;
       localStorage.setItem("physical-agent-lang", lang);
       document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+      const zhButton = document.querySelector('[data-lang="zh"]');
+      if (zhButton) zhButton.textContent = "中文";
       document.querySelectorAll("[data-i18n]").forEach(node => { node.textContent = t(node.dataset.i18n); });
       document.querySelectorAll("[data-i18n-placeholder]").forEach(node => { node.placeholder = t(node.dataset.i18nPlaceholder); });
       document.querySelectorAll("[data-lang]").forEach(node => node.classList.toggle("active", node.dataset.lang === lang));
       if (lastState) render(lastState);
+      if (lastIntegrationResult) renderIntegrationResult(lastIntegrationResult);
     }
 
     document.querySelectorAll("[data-lang]").forEach(node => {
       node.addEventListener("click", () => setLanguage(node.dataset.lang));
     });
     els.chatInput.addEventListener("input", () => { els.chatInput.dataset.touched = "true"; });
+    els.integrateStepSource.addEventListener("click", () => setIntegrationStep("source"));
+    els.integrateStepMode.addEventListener("click", () => setIntegrationStep("mode"));
+    els.integrateStepReview.addEventListener("click", () => setIntegrationStep("review"));
+    els.integrateSource.addEventListener("input", () => updateIntegrationStepState());
+    els.integrateMode.addEventListener("change", () => updateIntegrationStepState("mode"));
 
     async function api(path, options = {}) {
       const response = await fetch(path, {
@@ -858,6 +1068,99 @@ INDEX_HTML = r"""<!doctype html>
       div.className = "item";
       div.innerHTML = `<strong>${escapeHtml(title)}</strong><span>${escapeHtml(body || "")}</span>`;
       return div;
+    }
+
+    function compactJson(value) {
+      if (value === undefined || value === null) return "";
+      if (Array.isArray(value) && value.length === 0) return "";
+      if (typeof value === "object" && Object.keys(value).length === 0) return "";
+      return JSON.stringify(value);
+    }
+
+    function kv(label, value) {
+      const text = Array.isArray(value) ? value.join(", ") : String(value || "");
+      if (!text) return null;
+      const row = document.createElement("div");
+      row.innerHTML = `<strong>${escapeHtml(label)}:</strong> ${escapeHtml(text)}`;
+      return row;
+    }
+
+    function statusPill(status) {
+      const span = document.createElement("span");
+      span.className = `status-pill ${status || ""}`;
+      span.textContent = statusLabel(status);
+      return span;
+    }
+
+    function statusLabel(status) {
+      return t(status || "") || status || "";
+    }
+
+    function listItems(items, fallback, code = false) {
+      const values = (items || []).filter(Boolean);
+      if (!values.length) return `<ul><li>${escapeHtml(fallback)}</li></ul>`;
+      return `<ul>${values.map(value => {
+        const text = escapeHtml(value);
+        return `<li>${code ? `<code>${text}</code>` : text}</li>`;
+      }).join("")}</ul>`;
+    }
+
+    function renderIntegrationResult(payload) {
+      lastIntegrationResult = payload;
+      const result = payload && payload.result ? payload.result : {};
+      const outputPath = result.output_path || (result.integration || {}).output_path || "";
+      const files = result.generated_files || [];
+      const nextSteps = result.next_steps || (result.source || {}).next_steps || [];
+      els.integrateResult.style.display = "grid";
+      els.integrateResult.innerHTML = `
+        <h3>${escapeHtml(t("integrateResultTitle"))}</h3>
+        <div class="kv-grid">
+          <div><strong>${escapeHtml(t("integrateOutput"))}:</strong> <code>${escapeHtml(outputPath || "")}</code></div>
+          <div><strong>${escapeHtml(t("integrateFiles"))}:</strong></div>
+        </div>
+        ${listItems(files, t("integrateNoFiles"), true)}
+        <div class="kv-grid"><div><strong>${escapeHtml(t("integrateNextSteps"))}:</strong></div></div>
+        ${listItems(nextSteps, t("integrateNoNextSteps"))}
+      `;
+      updateIntegrationStepState("review");
+      els.integrateResult.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+
+    function setIntegrationStep(step) {
+      updateIntegrationStepState(step);
+      if (step === "source") {
+        els.integrateSource.focus();
+        return;
+      }
+      if (step === "mode") {
+        els.integrateMode.focus();
+        return;
+      }
+      if (step === "review") {
+        if (lastIntegrationResult) {
+          els.integrateResult.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        } else {
+          els.integrate.focus();
+        }
+      }
+    }
+
+    function updateIntegrationStepState(activeStep = null) {
+      const sourceReady = Boolean(els.integrateSource.value.trim());
+      const resultReady = Boolean(lastIntegrationResult);
+      const current = activeStep || (resultReady ? "review" : (sourceReady ? "mode" : "source"));
+      const steps = {
+        source: els.integrateStepSource,
+        mode: els.integrateStepMode,
+        review: els.integrateStepReview
+      };
+      for (const [name, node] of Object.entries(steps)) {
+        node.classList.toggle("active", name === current);
+        node.classList.toggle(
+          "done",
+          (name === "source" && sourceReady) || (name === "mode" && sourceReady) || (name === "review" && resultReady)
+        );
+      }
     }
 
     function render(state) {
@@ -890,15 +1193,19 @@ INDEX_HTML = r"""<!doctype html>
       const messages = ((state.chat || {}).messages) || [];
       if (messages.length === 0) {
         const empty = document.createElement("div");
-        empty.className = "message";
+        empty.className = "message system";
         empty.textContent = t("noChat");
         els.chatLog.appendChild(empty);
         return;
       }
       for (const message of messages.slice(-16)) {
         const div = document.createElement("div");
-        div.className = `message ${message.role}`;
-        div.textContent = `${message.role}: ${message.content}`;
+        const role = ["user", "assistant", "system"].includes(message.role) ? message.role : "system";
+        div.className = `message ${role}`;
+        const body = document.createElement("div");
+        body.className = "message-body";
+        body.textContent = message.content || "";
+        div.appendChild(body);
         els.chatLog.appendChild(div);
       }
       els.chatLog.scrollTop = els.chatLog.scrollHeight;
@@ -922,25 +1229,89 @@ INDEX_HTML = r"""<!doctype html>
     function renderActions(state) {
       els.actions.innerHTML = "";
       const board = state.actions || { pending: [], completed: [], cancelled: [] };
-      const labels = [["pending", t("pending")], ["completed", t("completed")], ["cancelled", t("cancelled")]];
-      for (const [name, label] of labels) {
-        const rows = board[name] || [];
-        const body = rows.length ? rows.map(row => `${row.id}: ${row.robot}.${row.capability}`).join("\n") : t("none");
-        els.actions.appendChild(item(label, body));
+      const feedbackHistory = Array.isArray((state.feedback || {}).history) ? state.feedback.history : [];
+      const feedbackByAction = {};
+      for (const entry of feedbackHistory) {
+        if (entry && entry.action_id) feedbackByAction[entry.action_id] = entry;
+      }
+      const rows = [
+        ...((board.pending || []).map(action => ({...action, status: "pending"}))),
+        ...((board.completed || []).map(action => {
+          const feedback = feedbackByAction[action.id] || {};
+          return {...action, status: feedback.status || "completed", feedback};
+        })),
+        ...((board.cancelled || []).map(action => {
+          const feedback = feedbackByAction[action.id] || {};
+          return {...action, status: feedback.status || "cancelled", feedback};
+        }))
+      ];
+      if (rows.length === 0) {
+        els.actions.appendChild(item(t("actionsTitle"), t("none")));
+        return;
+      }
+      for (const action of rows.slice(-8)) {
+        const card = document.createElement("div");
+        card.className = `action-card ${action.status}`;
+
+        const head = document.createElement("div");
+        head.className = "action-head";
+        const title = document.createElement("div");
+        title.className = "action-title";
+        title.textContent = `${action.id || ""}: ${action.robot || ""}.${action.capability || ""}`;
+        head.appendChild(title);
+        head.appendChild(statusPill(action.status));
+        card.appendChild(head);
+
+        const details = document.createElement("div");
+        details.className = "kv-grid";
+        for (const row of [
+          kv(t("params"), compactJson(action.params)),
+          kv(t("dependsOn"), action.depends_on || []),
+          kv(t("reason"), action.reason || ""),
+          kv(t("message"), (action.feedback || {}).message || ""),
+          kv(t("result"), compactJson((action.feedback || {}).result)),
+          kv(t("artifacts"), ((action.feedback || {}).artifacts || []))
+        ]) {
+          if (row) details.appendChild(row);
+        }
+        if (details.children.length > 0) card.appendChild(details);
+        els.actions.appendChild(card);
       }
     }
 
     function renderFeedback(state) {
       els.feedbackCard.innerHTML = "";
-      const latest = ((state.feedback || {}).latest) || {};
-      if (!Object.keys(latest).length) {
-        els.feedbackCard.appendChild(item(t("latest"), t("noFeedback")));
+      const feedback = state.feedback || {};
+      const history = Array.isArray(feedback.history) ? feedback.history : [];
+      const entries = history.length ? history.slice(-6).reverse() : (Object.keys(feedback.latest || {}).length ? [feedback.latest] : []);
+      if (entries.length === 0) {
+        els.feedbackCard.appendChild(item(t("recentFeedback"), t("noFeedback")));
         return;
       }
-      els.feedbackCard.appendChild(item(
-        t("latest"),
-        `${latest.action_id || ""} · ${latest.status || ""}\n${latest.message || ""}`
-      ));
+      for (const entry of entries) {
+        const card = document.createElement("div");
+        card.className = `feedback-entry ${entry.status || ""}`;
+
+        const head = document.createElement("div");
+        head.className = "feedback-head";
+        const title = document.createElement("div");
+        title.className = "feedback-title";
+        title.textContent = `${entry.action_id || ""}: ${entry.robot || ""}.${entry.capability || ""}`;
+        head.appendChild(title);
+        head.appendChild(statusPill(entry.status || ""));
+        card.appendChild(head);
+
+        const details = document.createElement("div");
+        details.className = "kv-grid";
+        for (const row of [
+          kv(t("message"), entry.message || ""),
+          kv(t("result"), compactJson(entry.result))
+        ]) {
+          if (row) details.appendChild(row);
+        }
+        if (details.children.length > 0) card.appendChild(details);
+        els.feedbackCard.appendChild(card);
+      }
     }
 
     function renderSystem(state) {
@@ -974,25 +1345,71 @@ INDEX_HTML = r"""<!doctype html>
       }
     }
 
+    async function sendChat() {
+      const message = els.chatInput.value.trim();
+      if (!message) return;
+      els.sendChat.disabled = true;
+      els.lastMessage.textContent = `${t("sendingChat")}...`;
+      try {
+        const result = await post("/api/chat", {
+          message,
+          planner: els.chatPlanner.value,
+          auto_step: els.chatAutoStep.checked
+        });
+        els.chatInput.value = "";
+        els.chatInput.dataset.touched = "";
+        els.lastMessage.textContent = result.message || t("done");
+        render(result.state || await api("/api/state"));
+        els.chatInput.focus();
+      } catch (error) {
+        els.lastMessage.textContent = error.message;
+      } finally {
+        els.sendChat.disabled = false;
+      }
+    }
+
+    async function integrateHardware() {
+      const source = els.integrateSource.value.trim();
+      if (!source) {
+        els.lastMessage.textContent = "Source cannot be empty.";
+        return;
+      }
+      els.integrate.disabled = true;
+      els.lastMessage.textContent = `${t("integrating")}...`;
+      try {
+        const result = await post("/api/integrate", {
+          source,
+          name: els.integrateName.value,
+          model: els.integrateModel.value,
+          llm: els.integrateMode.value === "llm"
+        });
+        els.lastMessage.textContent = result.message || t("done");
+        renderIntegrationResult(result);
+        render(result.state || await api("/api/state"));
+      } catch (error) {
+        els.lastMessage.textContent = error.message;
+      } finally {
+        els.integrate.disabled = false;
+      }
+    }
+
     els.setup.addEventListener("click", () => run("settingUp", () => post("/api/setup")));
     els.reset.addEventListener("click", () => run("resetting", () => post("/api/setup", { force: true })));
     els.startWatch.addEventListener("click", () => run("startingWatch", () => post("/api/watch/start")));
     els.stepWatch.addEventListener("click", () => run("runningStep", () => post("/api/watch/step")));
     els.demo.addEventListener("click", () => run("runningDemo", () => post("/api/demo")));
     els.refresh.addEventListener("click", () => run("refreshing", () => api("/api/state")));
-    els.sendChat.addEventListener("click", () => run("sendingChat", () => post("/api/chat", {
-      message: els.chatInput.value,
-      planner: els.chatPlanner.value,
-      auto_step: els.chatAutoStep.checked
-    })));
-    els.integrate.addEventListener("click", () => run("integrating", () => post("/api/integrate", {
-      source: els.integrateSource.value,
-      name: els.integrateName.value,
-      model: els.integrateModel.value,
-      llm: els.integrateMode.value === "llm"
-    })));
+    els.sendChat.addEventListener("click", sendChat);
+    els.chatInput.addEventListener("keydown", event => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        sendChat();
+      }
+    });
+    els.integrate.addEventListener("click", integrateHardware);
 
     setLanguage(lang);
+    updateIntegrationStepState();
     refresh();
   </script>
 </body>

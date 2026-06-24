@@ -63,3 +63,12 @@ def test_chat_runtime_auto_falls_back_when_llm_fails(tmp_path, monkeypatch):
 
     assert result["mode"] == "rule_based"
     assert "LLM chat was unavailable" in result["reply"]
+
+
+def test_chat_runtime_recognizes_chinese_integration_request(tmp_path):
+    config_path = tmp_path / "physical-agent.yaml"
+    setup_project(config_path, publish=True)
+    runtime = ChatRuntime(config_path, planner_name="rule_based")
+    runtime.setup()
+
+    assert runtime._looks_like_integration_request("帮我接入这个硬件 SDK ./vendor_sdk")

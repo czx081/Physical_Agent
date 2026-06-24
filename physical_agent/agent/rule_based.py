@@ -21,44 +21,42 @@ class RuleBasedPlanner(Planner):
         robots = capabilities.get("robots", {})
         actions: list[Action] = []
 
-        wants_observe = any(word in text for word in ("observe", "look", "scan"))
-        wants_pick = any(word in text for word in ("pick", "grasp"))
-        wants_place = any(word in text for word in ("place", "drop"))
-        wants_move = bool(re.search(r"\b(move|go)\b", text))
-        wants_open_gripper = any(
-            word in text
-            for word in (
-                "open gripper",
-                "open the gripper",
-                "gripper open",
-                "打开夹爪",
-                "张开夹爪",
-                "打开抓手",
-                "张开抓手",
-            )
+        wants_observe = _contains_any(text, "observe", "look", "scan", "观察", "看看", "看一下", "扫描")
+        wants_pick = _contains_any(text, "pick", "grasp", "夹取", "抓取", "拿起", "拾取", "抓住")
+        wants_place = _contains_any(text, "place", "drop", "放到", "放在", "放置", "放下", "放入")
+        wants_move = bool(re.search(r"\b(move|go)\b", text)) or _contains_any(
+            text, "移动", "前往", "走到", "去到"
         )
-        wants_close_gripper = any(
-            word in text
-            for word in (
-                "close gripper",
-                "close the gripper",
-                "gripper close",
-                "关闭夹爪",
-                "合上夹爪",
-                "闭合夹爪",
-                "关闭抓手",
-                "合上抓手",
-            )
+        wants_open_gripper = _contains_any(
+            text,
+            "open gripper",
+            "open the gripper",
+            "gripper open",
+            "打开夹爪",
+            "张开夹爪",
+            "打开抓手",
+            "张开抓手",
         )
-        wants_say = any(word in text for word in ("say", "speak", "tts", "播报", "说"))
-        wants_light = any(word in text for word in ("light", "rgb", "led", "灯"))
-        wants_stop = any(word in text for word in ("stop", "halt", "刹车", "停止"))
-        wants_home = any(word in text for word in ("home", "reset", "stand", "归位", "复位", "站好"))
-        wants_wave = any(word in text for word in ("wave", "hand wave", "挥手"))
-        wants_walk = any(word in text for word in ("walk", "forward", "backward", "前进", "后退"))
-        wants_turn = any(word in text for word in ("turn", "左转", "右转"))
-        wants_jump = any(word in text for word in ("jump", "跳"))
-        wants_volume = any(word in text for word in ("volume", "louder", "quieter", "音量", "声音"))
+        wants_close_gripper = _contains_any(
+            text,
+            "close gripper",
+            "close the gripper",
+            "gripper close",
+            "关闭夹爪",
+            "合上夹爪",
+            "闭合夹爪",
+            "关闭抓手",
+            "合上抓手",
+        )
+        wants_say = _contains_any(text, "say", "speak", "tts", "播报", "说", "讲话")
+        wants_light = _contains_any(text, "light", "rgb", "led", "灯", "灯光")
+        wants_stop = _contains_any(text, "stop", "halt", "刹车", "停止", "停下")
+        wants_home = _contains_any(text, "home", "reset", "stand", "归位", "复位", "站好")
+        wants_wave = _contains_any(text, "wave", "hand wave", "挥手")
+        wants_walk = _contains_any(text, "walk", "forward", "backward", "前进", "后退")
+        wants_turn = _contains_any(text, "turn", "左转", "右转", "转向")
+        wants_jump = _contains_any(text, "jump", "跳")
+        wants_volume = _contains_any(text, "volume", "louder", "quieter", "音量", "声音")
 
         if wants_observe:
             robot_id = self._choose_robot(robots, ["observe"])
@@ -285,7 +283,7 @@ class RuleBasedPlanner(Planner):
 
     def _object_id(self, text: str, world: dict[str, Any]) -> str:
         objects = world.get("state", {}).get("objects", {})
-        if "red block" in text:
+        if "red block" in text or _contains_any(text, "红色方块", "红方块", "红色积木", "红积木"):
             for object_id, item in objects.items():
                 if item.get("color") == "red" and item.get("type") == "block":
                     return object_id
@@ -302,7 +300,7 @@ class RuleBasedPlanner(Planner):
         for object_id in objects:
             if object_id.lower() in text:
                 return object_id
-        if "tray" in text:
+        if "tray" in text or _contains_any(text, "托盘", "盘子"):
             return "tray"
         match = re.search(r"(?:on|in|at|to)\s+(?:the\s+)?([a-z0-9_ -]+?)(?:\.|$)", text)
         if match:
@@ -353,7 +351,7 @@ class RuleBasedPlanner(Planner):
             return None
         value = float(number_match.group(0))
 
-        if any(token in text for token in (" to ", "到", "target", "set ", "设为", "设置为")):
+        if _contains_any(text, " to ", "到", "target", "set ", "设为", "设置为"):
             return robot_id, {"joint_name": candidate_joint_name, "target_deg": value}
         return robot_id, {"joint_name": candidate_joint_name, "delta_deg": value}
 
@@ -362,7 +360,7 @@ class RuleBasedPlanner(Planner):
             "wrist_roll": ["wrist_roll", "wrist roll", "roll wrist", "腕旋转", "手腕旋转", "腕滚转"],
             "shoulder_pan": ["shoulder_pan", "shoulder pan", "base joint", "底座"],
             "shoulder_lift": ["shoulder_lift", "shoulder lift", "大臂"],
-            "elbow_flex": ["elbow_flex", "elbow flex", "elbow", "小臂"],
+            "elbow_flex": ["elbow_flex", "elbow flex", "elbow", "小臂", "肘"],
             "wrist_flex": ["wrist_flex", "wrist flex", "wrist", "手腕"],
         }
         for joint_name in joint_names:
@@ -372,7 +370,7 @@ class RuleBasedPlanner(Planner):
         return None
 
     def _speech_text(self, task: str) -> str:
-        match = re.search(r'["“](.+?)["”]', task)
+        match = re.search(r'["“”](.+?)["“”]', task)
         if match:
             return match.group(1).strip()
         match = re.search(r"(?:say|speak|播报|说)\s+(.+)$", task, flags=re.IGNORECASE)
@@ -405,16 +403,16 @@ class RuleBasedPlanner(Planner):
         numbers = [int(value) for value in re.findall(r"\b\d{1,3}\b", text)]
         if numbers:
             return max(0, min(100, numbers[0]))
-        if any(word in text for word in ("louder", "higher", "大")):
+        if _contains_any(text, "louder", "higher", "大声", "调高", "更大"):
             return 80
-        if any(word in text for word in ("quieter", "lower", "小")):
+        if _contains_any(text, "quieter", "lower", "小声", "调低", "更小"):
             return 20
         return 50
 
     def _direction_param(self, text: str) -> int:
-        if any(word in text for word in ("left", "左")):
+        if _contains_any(text, "left", "左"):
             return -1
-        if any(word in text for word in ("right", "右")):
+        if _contains_any(text, "right", "右"):
             return 1
         return 1
 
@@ -436,3 +434,7 @@ class RuleBasedPlanner(Planner):
         if "forward" in text or "前进" in text:
             params["direction"] = 1
         return params
+
+
+def _contains_any(text: str, *needles: str) -> bool:
+    return any(needle in text for needle in needles)

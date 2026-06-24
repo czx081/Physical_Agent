@@ -9,6 +9,8 @@ CAPABILITIES = {
                 {"name": "move_to", "params_schema": {"required": ["x", "y", "z"]}},
                 {"name": "pick"},
                 {"name": "place"},
+                {"name": "open_gripper"},
+                {"name": "close_gripper"},
             ]
         }
     }
@@ -63,6 +65,33 @@ def test_pick_and_place_generates_dependency():
     )
     assert [action.capability for action in actions] == ["pick", "place"]
     assert actions[1].depends_on == [actions[0].id]
+
+
+def test_chinese_pick_and_place_generates_dependency():
+    actions = RuleBasedPlanner().plan(
+        task="夹取红色方块并放到托盘上",
+        capabilities=CAPABILITIES,
+        world=WORLD,
+    )
+    assert [action.capability for action in actions] == ["pick", "place"]
+    assert actions[0].params["object_id"] == "red_block"
+    assert actions[1].params["target"] == "tray"
+    assert actions[1].depends_on == [actions[0].id]
+
+
+def test_chinese_gripper_commands():
+    open_actions = RuleBasedPlanner().plan(
+        task="打开夹爪",
+        capabilities=CAPABILITIES,
+        world=WORLD,
+    )
+    close_actions = RuleBasedPlanner().plan(
+        task="关闭夹爪",
+        capabilities=CAPABILITIES,
+        world=WORLD,
+    )
+    assert open_actions[0].capability == "open_gripper"
+    assert close_actions[0].capability == "close_gripper"
 
 
 def test_wave_generates_otto_action():

@@ -696,6 +696,145 @@ class ChatRuntime:
             lines.append(f"{label}: {_summarize_text(result.test_output)}")
         return "\n".join(lines)
 
+    def _looks_like_integration_request(self, message: str) -> bool:
+        text = message.lower()
+        has_source = bool(self._extract_integration_source(message))
+        direct_phrases = (
+            "integrate",
+            "onboard",
+            "connect this hardware",
+            "hardware repo",
+            "github",
+            "sdk",
+            "接入",
+            "适配",
+            "仓库",
+            "驱动",
+            "硬件",
+        )
+        if has_source and any(phrase in text for phrase in direct_phrases):
+            return True
+        return any(
+            phrase in text
+            for phrase in (
+                "generate a driver",
+                "create a driver",
+                "new hardware driver",
+                "帮我接入",
+                "帮我适配",
+                "生成驱动",
+                "接入硬件",
+            )
+        )
+
+    def _integration_request_wants_llm(self, message: str) -> bool:
+        text = message.lower()
+        return any(
+            phrase in text
+            for phrase in (
+                "--llm",
+                "llm",
+                "write the driver",
+                "implement the driver",
+                "real sdk",
+                "complete driver",
+                "自动实现",
+                "真实sdk",
+                "真实 sdk",
+                "实现driver",
+                "实现 driver",
+                "写完整",
+                "生成完整",
+                "接入sdk",
+                "接入 sdk",
+            )
+        )
+
+    def _extract_integration_source(self, message: str) -> str | None:
+        url_match = re.search(
+            r"(https?://[^\s]+github\.com/[^\s]+|git@github\.com:[^\s]+)",
+            message,
+            re.IGNORECASE,
+        )
+        if url_match:
+            return url_match.group(1).rstrip(".,)")
+        path_match = re.search(r"(?:(?:[A-Za-z]:[\\/])|(?:\./)|(?:\.\\/)|(?:~/)|(?:/))[^\s]+", message)
+        if path_match:
+            return path_match.group(0).rstrip(".,)")
+        package_match = re.search(
+            r"(?:package|sdk|repo|仓库|项目|路径)\s*[:：]?\s*([A-Za-z0-9_.-]+)",
+            message,
+            re.IGNORECASE,
+        )
+        if package_match:
+            return package_match.group(1).strip()
+        return None
+
+    def _format_code_result(self, result: Any, *, user_message: str = "") -> str:
+        zh = _looks_like_chinese(user_message)
+        changed = ", ".join(result.changed_files) or "none"
+        tests = ", ".join(result.tests_run) or "none"
+        artifacts = ", ".join(getattr(result, "run_artifacts", []) or []) or "none"
+        summary = result.summary or "Updated the repository."
+        if getattr(result, "intent_kind", "") == "sdk_integration":
+            status = "finished" if result.ok else "could not finish"
+            integration = getattr(result, "integration", {}) or {}
+            output_path = integration.get("output_path")
+            if zh:
+                head = (
+                    "我把这条请求识别成硬件接入任务，已经完成。"
+                    if result.ok
+                    else "我把这条请求识别成硬件接入任务，但还没有完成。"
+                )
+                lines = [head]
+            else:
+                lines = [f"I treated that as a hardware integration task and {status}: {summary}"]
+            if output_path:
+                lines.append(f"生成位置: {output_path}" if zh else f"Generated scaffold: {output_path}")
+            if changed != "none":
+                lines.append(f"改动文件: {changed}." if zh else f"Files touched: {changed}.")
+            if tests != "none":
+                lines.append(f"验证: {tests}." if zh else f"Validation: {tests}.")
+            if not output_path and changed == "none" and tests == "none":
+                lines.append(summary)
+            return "\n".join(lines)
+        if getattr(result, "intent_kind", "") == "code_run":
+            status = "succeeded" if result.ok else "failed"
+            if zh:
+                lines = [
+                    "可以。我把这条请求识别成代码执行任务，已经运行完成，结果成功。"
+                    if result.ok
+                    else "可以。我把这条请求识别成代码执行任务并尝试运行了，但这次失败了。"
+                ]
+            else:
+                lines = [f"Yes. I treated that as a code execution task, ran it, and it {status}."]
+            if artifacts != "none":
+                lines.append(f"产物: {artifacts}." if zh else f"Artifact: {artifacts}.")
+            elif tests != "none":
+                lines.append(f"命令: {tests}." if zh else f"Command: {tests}.")
+            if not result.ok and summary:
+                lines.append(summary)
+            return "\n".join(lines)
+        status = "succeeded" if result.ok else "needs another round"
+        if zh:
+            lines = [
+                "可以。我把这条请求识别成代码任务，已经处理完成。"
+                if result.ok
+                else "可以。我把这条请求识别成代码任务，但还需要再处理一轮。"
+            ]
+        else:
+            lines = [f"Yes. I treated that as a code task and it {status}."]
+        if summary:
+            lines.append(summary)
+        if changed != "none":
+            lines.append(f"改动文件: {changed}." if zh else f"Changed files: {changed}.")
+        if tests != "none":
+            lines.append(f"检查: {tests}." if zh else f"Checks run: {tests}.")
+        if not result.ok and result.test_output.strip():
+            label = "关键输出" if zh else "Most relevant output"
+            lines.append(f"{label}: {_summarize_text(result.test_output)}")
+        return "\n".join(lines)
+
     def _config(self) -> PhysicalAgentConfig:
         if self.config is None:
             raise RuntimeError("ChatRuntime has not been set up.")
@@ -814,3 +953,43 @@ def _max_action_number(action_ids: set[str]) -> int:
             except ValueError:
                 continue
     return maximum
+
+
+def _looks_like_code_followup(text: str) -> bool:
+    lowered = text.lower().strip()
+    if not lowered:
+        return False
+    followups = (
+        "可以",
+        "好",
+        "好的",
+        "帮我实现",
+        "实现一个",
+        "继续",
+        "写吧",
+        "做吧",
+        "yes",
+        "ok",
+        "sure",
+        "go ahead",
+    )
+    return any(item in lowered for item in followups)
+
+
+def _mentions_code_capability(text: str) -> bool:
+    lowered = text.lower()
+    markers = (
+        "代码",
+        "脚本",
+        "运行",
+        "执行",
+        "编写",
+        "实现",
+        "test",
+        "tests",
+        "code",
+        "script",
+        "run",
+        "execute",
+    )
+    return any(marker in lowered for marker in markers)

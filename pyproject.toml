@@ -31,6 +31,9 @@ physical-agent = "physical_agent.cli:app"
 [tool.setuptools.packages.find]
 include = ["physical_agent*"]
 
+[tool.setuptools.package-data]
+physical_agent = ["gui/static/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"

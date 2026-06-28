@@ -116,6 +116,27 @@ def test_gui_homepage_has_language_toggle(tmp_path):
         server.server_close()
 
 
+def test_gui_serves_static_assets(tmp_path):
+    server = make_server(tmp_path / "physical-agent.yaml", port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        css = _read_text(f"{base_url}/static/styles.css")
+        api_js = _read_text(f"{base_url}/static/api.js")
+        app_js = _read_text(f"{base_url}/static/app.js")
+        render_js = _read_text(f"{base_url}/static/render.js")
+        i18n_js = _read_text(f"{base_url}/static/i18n.js")
+        assert ".chat-log" in css
+        assert "window.GuiApi" in api_js
+        assert "window.GuiRender" in render_js
+        assert "sendChat" in app_js
+        assert "window.I18N" in i18n_js
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_gui_http_demo_endpoint(tmp_path):
     server = make_server(tmp_path / "physical-agent.yaml", port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)

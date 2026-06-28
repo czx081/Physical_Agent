@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Physical Agent</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Physical Agent</h1>
+      <p data-i18n="subtitle">Chat, observe, and safely propose physical actions.</p>
+    </div>
+    <div class="row top-actions">
+      <div id="status" class="badge warn" data-i18n="loading">Loading</div>
+      <div class="row lang" aria-label="Language">
+        <button type="button" data-lang="en">English</button>
+        <button type="button" data-lang="zh">中文</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="stack">
+      <section class="stack compact-panel chat-panel">
+        <div class="row chat-toolbar">
+          <select id="chat-planner" aria-label="Planner">
+            <option value="auto" data-i18n="autoChat">Auto</option>
+            <option value="llm" data-i18n="llmChat">LLM</option>
+            <option value="rule_based" data-i18n="ruleChat">Rules</option>
+          </select>
+        </div>
+        <div id="chat-log" class="chat-log"></div>
+        <textarea id="chat-input" rows="3" data-i18n-placeholder="chatPlaceholder" placeholder="Ask what the agent sees, or request a safe action."></textarea>
+        <div class="row chat-actions">
+          <button id="send-chat" class="primary" data-i18n="send">Send</button>
+          <label class="execution-mode"><input id="chat-auto-step" type="checkbox"> <span data-i18n="autoStep">Run one watch step after proposing</span></label>
+        </div>
+        <details id="code-result-panel" style="display:none;">
+          <summary data-i18n="codeSkillTitle">Code skill result</summary>
+          <pre id="code-result-json">{}</pre>
+        </details>
+      </section>
+
+      <section class="stack compact-panel quick-panel">
+        <div class="quick-groups">
+          <div class="quick-group">
+            <h3 data-i18n="projectOps">Project</h3>
+            <div class="quick-buttons">
+              <button id="setup" class="primary" data-i18n="setup">Setup</button>
+              <button id="reset" data-i18n="reset">Reset</button>
+              <button id="refresh" data-i18n="refresh">Refresh</button>
+            </div>
+          </div>
+          <div class="quick-group">
+            <h3 data-i18n="watchOps">Watch</h3>
+            <div class="quick-buttons">
+              <button id="start-watch" data-i18n="startWatch">Start watch</button>
+              <button id="step-watch" data-i18n="stepWatch">Run step</button>
+            </div>
+          </div>
+          <div class="quick-group">
+            <h3 data-i18n="demoOps">Demo</h3>
+            <div class="quick-buttons">
+              <button id="demo" class="success" data-i18n="demo">Pick/place demo</button>
+            </div>
+          </div>
+        </div>
+        <p id="last-message"></p>
+      </section>
+
+      <section class="stack">
+        <h2 data-i18n="integrateTitle">Hardware integration</h2>
+        <div class="wizard-steps">
+          <button id="integrate-step-source" class="step-card active" type="button" data-step="source">
+            <strong data-i18n="integrateStepSource">1. Source</strong>
+            <span data-i18n="integrateStepSourceHint">Local SDK, GitHub repo, or package name.</span>
+          </button>
+          <button id="integrate-step-mode" class="step-card" type="button" data-step="mode">
+            <strong data-i18n="integrateStepMode">2. Mode</strong>
+            <span data-i18n="integrateStepModeHint">Start with a scaffold; use LLM draft when SDK context is available.</span>
+          </button>
+          <button id="integrate-step-review" class="step-card" type="button" data-step="review">
+            <strong data-i18n="integrateStepReview">3. Review</strong>
+            <span data-i18n="integrateStepReviewHint">Inspect generated files before connecting real hardware.</span>
+          </button>
+        </div>
+        <label class="field-label">
+          <span data-i18n="integrateSourceLabel">Source</span>
+          <input id="integrate-source" type="text" data-i18n-placeholder="integrateSourcePlaceholder" placeholder="./vendor_sdk or https://github.com/org/repo">
+        </label>
+        <div class="grid-2">
+          <label class="field-label">
+            <span data-i18n="integrateNameLabel">Driver name</span>
+            <input id="integrate-name" type="text" data-i18n-placeholder="integrateNamePlaceholder" placeholder="optional_driver_name">
+          </label>
+          <label class="field-label">
+            <span data-i18n="integrateModelLabel">Model override</span>
+            <input id="integrate-model" type="text" data-i18n-placeholder="integrateModelPlaceholder" placeholder="optional model override">
+          </label>
+        </div>
+        <div class="row">
+          <label class="field-label">
+            <span data-i18n="integrateModeLabel">Generation mode</span>
+            <select id="integrate-mode" aria-label="Integration mode">
+              <option value="scaffold" data-i18n="integrateModeScaffold">Scaffold</option>
+              <option value="llm" data-i18n="integrateModeLlm">LLM draft</option>
+            </select>
+          </label>
+          <button id="integrate" data-i18n="integrateButton">Generate driver</button>
+        </div>
+        <div id="integrate-result" class="integration-result" style="display:none;"></div>
+        <p data-i18n="integrateHint">Scaffold mode writes a safe watch-side driver template. LLM draft mode reads SDK context, proposes driver.py, validates it in mock mode, and never executes hardware from the browser.</p>
+      </section>
+    </div>
+
+    <div class="stack">
+      <section>
+        <h2 data-i18n="worldTitle">World</h2>
+        <p id="world-summary" data-i18n="noWorld">No world state yet.</p>
+        <div id="world-robots" class="world-grid"></div>
+        <div id="world-objects" class="world-grid"></div>
+      </section>
+
+      <section>
+        <h2 data-i18n="timelineTitle">Execution timeline</h2>
+        <div class="timeline-filters" aria-label="Timeline filters">
+          <button type="button" class="active" data-timeline-filter="all" data-i18n="filterAll">All</button>
+          <button type="button" data-timeline-filter="pending" data-i18n="filterPending">Pending</button>
+          <button type="button" data-timeline-filter="completed" data-i18n="filterCompleted">Completed</button>
+          <button type="button" data-timeline-filter="failed" data-i18n="filterFailed">Failed</button>
+          <button type="button" data-timeline-filter="cancelled" data-i18n="filterCancelled">Cancelled</button>
+        </div>
+        <div id="timeline" class="timeline-list"></div>
+      </section>
+
+      <section>
+        <h2 data-i18n="systemTitle">System</h2>
+        <div id="project" class="list"></div>
+        <details style="margin-top: 8px;">
+          <summary data-i18n="details">Details</summary>
+          <pre id="details-json">{}</pre>
+        </details>
+      </section>
+    </div>
+  </main>
+
+  <script src="/static/i18n.js"></script>
+  <script src="/static/api.js"></script>
+  <script src="/static/render.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

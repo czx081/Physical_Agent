@@ -70,7 +70,7 @@
         <p id="last-message"></p>
       </section>
 
-      <section class="stack">
+      <section class="stack integration-panel">
         <h2 data-i18n="integrateTitle">Hardware integration</h2>
         <div class="wizard-steps">
           <button id="integrate-step-source" class="step-card active" type="button" data-step="source">
@@ -86,11 +86,11 @@
             <span data-i18n="integrateStepReviewHint">Inspect generated files before connecting real hardware.</span>
           </button>
         </div>
-        <label class="field-label">
+        <label class="field-label integration-source">
           <span data-i18n="integrateSourceLabel">Source</span>
           <input id="integrate-source" type="text" data-i18n-placeholder="integrateSourcePlaceholder" placeholder="./vendor_sdk or https://github.com/org/repo">
         </label>
-        <div class="grid-2">
+        <div class="integration-form-grid">
           <label class="field-label">
             <span data-i18n="integrateNameLabel">Driver name</span>
             <input id="integrate-name" type="text" data-i18n-placeholder="integrateNamePlaceholder" placeholder="optional_driver_name">
@@ -99,8 +99,6 @@
             <span data-i18n="integrateModelLabel">Model override</span>
             <input id="integrate-model" type="text" data-i18n-placeholder="integrateModelPlaceholder" placeholder="optional model override">
           </label>
-        </div>
-        <div class="row">
           <label class="field-label">
             <span data-i18n="integrateModeLabel">Generation mode</span>
             <select id="integrate-mode" aria-label="Integration mode">
